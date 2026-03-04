@@ -1,0 +1,91 @@
+import logger from "../Utils/logger";
+
+const BREVO_API_KEY = process.env.BREVO_API_KEY || "";
+const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@agroguardian.ai";
+const FROM_NAME = "AgroGuardian AI";
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
+
+const sendBrevoEmail = async (
+  to: string,
+  subject: string,
+  htmlContent: string
+): Promise<void> => {
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": BREVO_API_KEY,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: FROM_NAME, email: FROM_EMAIL },
+      to: [{ email: to }],
+      subject,
+      htmlContent,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    logger.error(`Brevo API error: ${error}`);
+    throw new Error("Failed to send email");
+  }
+};
+
+export const sendVerificationEmail = async (
+  email: string,
+  token: string
+): Promise<void> => {
+  const verificationUrl = `${CLIENT_URL}/verify-email?token=${token}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d7a3a;">🌱 Welcome to AgroGuardian AI!</h2>
+      <p>Thank you for registering. Please verify your email address by clicking the button below:</p>
+      <a href="${verificationUrl}" 
+         style="display: inline-block; padding: 12px 24px; background-color: #2d7a3a; color: white; text-decoration: none; border-radius: 6px; margin: 16px 0;">
+        Verify Email
+      </a>
+      <p>Or copy and paste this link in your browser:</p>
+      <p style="word-break: break-all; color: #666;">${verificationUrl}</p>
+      <p style="color: #999; font-size: 12px;">This link expires in 24 hours. If you didn't create an account, please ignore this email.</p>
+    </div>
+  `;
+
+  try {
+    await sendBrevoEmail(email, "Verify Your Email - AgroGuardian AI", htmlContent);
+    logger.info(`Verification email sent to ${email}`);
+  } catch (error) {
+    logger.error("Failed to send verification email", error);
+    throw new Error("Failed to send verification email");
+  }
+};
+
+export const sendPasswordResetEmail = async (
+  email: string,
+  token: string
+): Promise<void> => {
+  const resetUrl = `${CLIENT_URL}/reset-password?token=${token}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d7a3a;">🔒 Password Reset Request</h2>
+      <p>You requested a password reset. Click the button below to set a new password:</p>
+      <a href="${resetUrl}" 
+         style="display: inline-block; padding: 12px 24px; background-color: #2d7a3a; color: white; text-decoration: none; border-radius: 6px; margin: 16px 0;">
+        Reset Password
+      </a>
+      <p>Or copy and paste this link in your browser:</p>
+      <p style="word-break: break-all; color: #666;">${resetUrl}</p>
+      <p style="color: #999; font-size: 12px;">This link expires in 1 hour. If you didn't request a password reset, please ignore this email.</p>
+    </div>
+  `;
+
+  try {
+    await sendBrevoEmail(email, "Reset Your Password - AgroGuardian AI", htmlContent);
+    logger.info(`Password reset email sent to ${email}`);
+  } catch (error) {
+    logger.error("Failed to send password reset email", error);
+    throw new Error("Failed to send password reset email");
+  }
+};
