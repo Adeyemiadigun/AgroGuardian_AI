@@ -10,6 +10,7 @@ import { connectDB } from './Config/db';
 import logger from './Utils/logger';
 import passport from './Config/passport';
 import authRoutes from './Routes/auth.routes';
+import farmRoutes from './Routes/farm.routes';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -21,6 +22,7 @@ app.use(express.json());
 app.use(passport.initialize());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/farms', farmRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')

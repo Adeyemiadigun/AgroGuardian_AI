@@ -29,7 +29,6 @@ router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 router.post("/logout", authenticate as any, logout as any);
 
-// Google OAuth routes
 router.get(
   "/google",
   passport.authenticate("google", { scope: ["profile", "email"] })
