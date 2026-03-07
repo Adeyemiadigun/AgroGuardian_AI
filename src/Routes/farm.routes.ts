@@ -3,10 +3,11 @@ import { createFarmController, getAllFarms, getFarm, updateFarmController, delet
 import { authenticate } from "../Middlewares/auth.middleware";
 import { validate } from "../Middlewares/validate.middleware";
 import { createFarmSchema, updateFarmSchema } from "../Validators/farm.validator";
+import upload from "../Middlewares/upload.middleware";
 
 const router = Router();
 
-router.post("/", authenticate as any, validate(createFarmSchema), createFarmController as any);
+router.post("/", authenticate as any, upload.single("image"), validate(createFarmSchema), createFarmController as any);
 
 router.get("/", authenticate as any, getAllFarms as any);
 

@@ -5,7 +5,7 @@ import logger from "../Utils/logger";
 
 export const createFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const farm = await createFarm(req.body, req.user!.userId);
+        const farm = await createFarm(req.body, req.user!.userId, req.file?.buffer);
         res.status(201).json({ 
             success: true, 
             message: "Farm created successfully",

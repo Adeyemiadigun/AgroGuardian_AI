@@ -4,13 +4,14 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 import express from 'express';
-import type { Express , Request, Response } from 'express';
+import type { Express , Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { connectDB } from './Config/db';
 import logger from './Utils/logger';
 import passport from './Config/passport';
 import authRoutes from './Routes/auth.routes';
 import farmRoutes from './Routes/farm.routes';
+import diagnosisRoutes from './Routes/diagnosis.routes';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -23,11 +24,23 @@ app.use(passport.initialize());
 
 app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);
+app.use('/api/diagnosis', diagnosisRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')
 });
 
-app.listen(PORT, async () => {
+// Global error handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+    logger.error('Unhandled error', err);
+    res.status(err.status || 500).json({
+        success: false,
+        message: err.message || 'Internal server error',
+    });
+});
+
+const server = app.listen(PORT, async () => {
     logger.info(`Server is running on port ${PORT}`);
 });
+
+server.timeout = 60000; // Set timeout to 60 seconds

@@ -2,17 +2,34 @@ import Farm from "../Models/Farm";
 import logger from "../Utils/logger";
 import { IFarm } from "../Types/farm.types";
 import {CreateFarmInput, UpdateFarmInput} from "../Validators/farm.validator";
+import cloudinary from "../Config/cloudinary";
 
-export const createFarm = async (data: CreateFarmInput, ownerId: string) => {
+export const createFarm = async (data: CreateFarmInput, ownerId: string, imageBuffer?: Buffer) => {
     const { name, size, sizeUnit, crops, location:{
         address, city, state, country, coordinates:{latitude, longitude}}, 
-        imageUrl, description, status, irrigationType, soilType, establishedDate
+        imageUrl: providedImageUrls, description, status, irrigationType, soilType, establishedDate
     } = data;
 
     const existingFarm = await Farm.findOne({ name: name.trim(), owner: ownerId });
     if(existingFarm){
         logger.error(`Farm creation failed: Farm with name "${name}" already exists for this user.`);
         throw new Error("Farm with this name already exists for this user");
+    }
+
+    let finalImageUrls = providedImageUrls || [];
+
+    if (imageBuffer) {
+        const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+                { folder: "agroguardian/farms", resource_type: "image" },
+                (error, result) => {
+                    if (error || !result) return reject(error || new Error("Upload failed"));
+                    resolve(result);
+                }
+            );
+            stream.end(imageBuffer);
+        });
+        finalImageUrls.push(uploadResult.secure_url);
     }
 
     const farm = await Farm.create({
@@ -31,7 +48,7 @@ export const createFarm = async (data: CreateFarmInput, ownerId: string) => {
                 longitude: longitude
             }
         },
-        imageUrl: imageUrl,
+        imageUrl: finalImageUrls,
         description: description,
         status: status,
         irrigationType: irrigationType,
@@ -42,7 +59,8 @@ export const createFarm = async (data: CreateFarmInput, ownerId: string) => {
     logger.info(`Farm created: ${name} by user ${ownerId}`);
 
     return{
-        id: farm._id
+        id: farm._id,
+        imageUrl: farm.imageUrl
     }
 }
 
