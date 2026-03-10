@@ -12,6 +12,7 @@ import passport from './Config/passport';
 import authRoutes from './Routes/auth.routes';
 import farmRoutes from './Routes/farm.routes';
 import diagnosisRoutes from './Routes/diagnosis.routes';
+import weatherRoutes from './Routes/weather.routes';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -25,12 +26,12 @@ app.use(passport.initialize());
 app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);
 app.use('/api/diagnosis', diagnosisRoutes);
+app.use('/api/weather', weatherRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')
 });
 
-// Global error handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     logger.error('Unhandled error', err);
     res.status(err.status || 500).json({
@@ -43,4 +44,4 @@ const server = app.listen(PORT, async () => {
     logger.info(`Server is running on port ${PORT}`);
 });
 
-server.timeout = 60000; // Set timeout to 60 seconds
+server.timeout = 60000; 

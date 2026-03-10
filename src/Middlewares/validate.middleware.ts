@@ -1,9 +1,10 @@
+import logger from "../Utils/logger";
 import { Request, Response, NextFunction } from "express";
 import { ZodSchema } from "zod";
 
 export const validate = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
-    console.log('DEBUG validate.middleware.ts - req.body:', req.body);
+    logger.debug('validate.middleware.ts - req.body:', req.body);
     const result = schema.safeParse(req.body);
 
     if (!result.success) {

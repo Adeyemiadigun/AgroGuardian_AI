@@ -19,13 +19,13 @@ export const createFarmSchema = z.object({
         state: z.string("State is required"),
         country: z.string("Country is required"),
         coordinates: z.object({
-            latitude: z.number("Latitude is required")
-            .min(-90, "Latitude must be between -90 and 90")
-            .max(90, "Latitude must be between -90 and 90"),
-            longitude: z.number("Longitude is required")
-            .min(-180, "Longitude must be between -180 and 180")
-            .max(180, "Longitude must be between -180 and 180"),
-        })
+            latitude: z.number("Latitude must be between -90 and 90")
+            .min(-90)
+            .max(90),
+            longitude: z.number("Longitude must be between -180 and 180")
+            .min(-180)
+            .max(180),
+        }).optional() 
     }),
 
     imageUrl: z.array(z.string().url("Each image URL must be valid"))

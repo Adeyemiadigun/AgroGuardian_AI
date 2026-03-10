@@ -17,7 +17,6 @@ export const diagnoseCrop = async (
     throw new Error("Farm not found");
   }
 
-  // Run Cloudinary upload and AI analysis in parallel
   const [uploadResult, aiResult] = await Promise.all([
     new Promise<{ secure_url: string }>((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(

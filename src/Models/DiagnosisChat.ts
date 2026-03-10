@@ -1,5 +1,5 @@
 import mongoose, {Schema} from "mongoose";
-import { IDiagnosisChat, IChatMessage } from "../Types/diagnosis.types";
+import { IDiagnosisChat} from "../Types/diagnosis.types";
 
 const chatMessageSchema = new Schema<IDiagnosisChat>({
     diagnosisId: { type: Schema.Types.ObjectId, ref: "CropDiagnosis", required: true },

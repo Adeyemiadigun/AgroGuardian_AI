@@ -28,6 +28,7 @@ export const diagnoseController = async (req: AuthRequest, res: Response): Promi
       req.file.mimetype
     );
 
+    logger.info("Diagnosis created", { diagnosisId: diagnosis._id, userId });
     res.status(201).json({
       success: true,
       message: "Crop diagnosis completed",
@@ -48,6 +49,7 @@ export const getDiagnosesByFarmController = async (req: AuthRequest, res: Respon
     const userId = req.user!.userId as string;
 
     const diagnoses = await getDiagnosesByFarm(farmId, userId);
+    logger.info("Diagnoses retrieved", { farmId, userId, count: diagnoses.length });
     res.status(200).json({
       success: true,
       message: "Diagnoses retrieved successfully",
@@ -68,6 +70,7 @@ export const getDiagnosisController = async (req: AuthRequest, res: Response): P
     const userId = req.user!.userId as string;
 
     const diagnosis = await getDiagnosisById(diagnosisId, userId);
+    logger.info("Diagnosis retrieved", { diagnosisId, userId });
     res.status(200).json({
       success: true,
       message: "Diagnosis retrieved successfully",
@@ -88,6 +91,7 @@ export const updateStatusController = async (req: AuthRequest, res: Response): P
     const userId = req.user!.userId as string;
 
     const diagnosis = await updateDiagnosisStatus(diagnosisId, userId, req.body.status);
+    logger.info("Diagnosis status updated", { diagnosisId, userId, status: req.body.status });
     res.status(200).json({
       success: true,
       message: "Diagnosis status updated",
@@ -108,6 +112,7 @@ export const sendChatController = async (req: AuthRequest, res: Response): Promi
     const userId = req.user!.userId as string;
 
     const result = await sendChatMessage(diagnosisId, userId, req.body.message);
+    logger.info("Chat message sent", { diagnosisId, userId });
     res.status(200).json({
       success: true,
       message: "Chat message sent",
@@ -128,6 +133,7 @@ export const getChatController = async (req: AuthRequest, res: Response): Promis
     const userId = req.user!.userId as string;
 
     const chat = await getChatHistory(diagnosisId, userId);
+    logger.info("Chat history retrieved", { diagnosisId, userId });
     res.status(200).json({
       success: true,
       message: "Chat history retrieved",

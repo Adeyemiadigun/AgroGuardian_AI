@@ -54,6 +54,7 @@ export const verifyUserEmail = async (token: string) => {
   });
 
   if (!user) {
+    logger.error("Invalid or expired verification token");
     throw new Error("Invalid or expired verification token");
   }
 
