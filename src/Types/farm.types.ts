@@ -13,6 +13,7 @@ export interface IFarm extends Document {
     status: "active" | "inactive" | "fallow";
     irrigationType: "drip" | "sprinkler" | "flood" | "rainfed" | "none";
     soilType: "clay" | "sandy" | "loamy" | "silty" | "peaty" | "laterite" | "clay-loam"| "sandy-loam";
+    climateZone: "tropical" | "arid" | "temperate" | "continental" | "polar";
     createdAt: Date;
     updatedAt: Date;
     establishedDate?: Date;
