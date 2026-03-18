@@ -4,6 +4,7 @@ import Farm from "../Models/Farm";
 import cloudinary from "../Config/cloudinary";
 import { analyzeCropImage, chatWithDiagnosis, getModelName } from "../Utils/geminiClient";
 import logger from "../Utils/logger";
+import { addResilienceSyncJob } from "../Queues/resilience.queue";
 
 export const diagnoseCrop = async (
   farmId: string,
@@ -62,6 +63,9 @@ export const diagnoseCrop = async (
 
   logger.info(`Crop diagnosis completed for farm ${farmId}: ${aiResult.diagnosis}`);
 
+  // Update resilience score after new diagnosis via background queue
+  addResilienceSyncJob(farmId, userId);
+
   return diagnosis;
 };
 
@@ -97,6 +101,10 @@ export const updateDiagnosisStatus = async (
     throw new Error("Diagnosis not found");
   }
   logger.info(`Diagnosis ${diagnosisId} status updated to ${status}`);
+
+  // Update resilience score after status change via background queue
+  addResilienceSyncJob(diagnosis.farmId.toString(), userId);
+
   return diagnosis;
 };
 

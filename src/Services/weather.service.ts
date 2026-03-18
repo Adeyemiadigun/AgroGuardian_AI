@@ -5,16 +5,12 @@ import ClimateRisk from "../Models/ClimateRisk";
 import WeatherAlert from "../Models/WeatherAlert";
 import mongoose from "mongoose";
 import logger from "../Utils/logger";
+import { PlantingWindow } from "../Types/weather.types";
+import { addResilienceSyncJob } from "../Queues/resilience.queue";
 
 const API_KEY = process.env.WEATHER_API_KEY || "YOUR_OPENWEATHER_API_KEY";
 const BASE_URL = "https://api.openweathermap.org/data/2.5";
 
-interface PlantingWindow {
-  date: Date;
-  score: number; // 0-100
-  reason: string;
-  isViable: boolean;
-}
 
 const calculateRisks = (current: any, forecast: any[]) => {
       logger.debug('Calculating climate risks', { current, forecast });
@@ -196,6 +192,8 @@ export const getClimateRisk = async (farmId: string) => {
 
       await generateAlerts(farmId, risks);
       logger.info('Alerts generated (if any)');
+
+      addResilienceSyncJob(farmId, farm.owner.toString());
 
       return {
         climateRisk,

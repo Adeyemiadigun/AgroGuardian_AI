@@ -13,11 +13,15 @@ import authRoutes from './Routes/auth.routes';
 import farmRoutes from './Routes/farm.routes';
 import diagnosisRoutes from './Routes/diagnosis.routes';
 import weatherRoutes from './Routes/weather.routes';
+import { initResilienceWorker } from './Workers/resilience.worker';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
 connectDB();
+
+// Initialize BullMQ Workers
+initResilienceWorker();
 
 app.use(cors());
 app.use(express.json());
