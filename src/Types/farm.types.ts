@@ -14,6 +14,8 @@ export interface IFarm extends Document {
     irrigationType: "drip" | "sprinkler" | "flood" | "rainfed" | "none";
     soilType: "clay" | "sandy" | "loamy" | "silty" | "peaty" | "laterite" | "clay-loam"| "sandy-loam";
     climateZone: "tropical" | "arid" | "temperate" | "continental" | "polar";
+    baselinePractices: string[];
+    initialSoilCarbon?: number;
     createdAt: Date;
     updatedAt: Date;
     establishedDate?: Date;
