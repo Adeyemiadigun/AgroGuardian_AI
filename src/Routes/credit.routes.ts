@@ -9,9 +9,9 @@ import { generateCreditsSchema } from "../Validators/practice.validator";
 
 const router = Router();
 
-router.use(authenticate);
+router.use(authenticate as any);
 
-router.post("/generate", validate(generateCreditsSchema), generateCreditsController);
-router.get("/farms/:farmId", getFarmCreditsController);
+router.post("/generate", validate(generateCreditsSchema), generateCreditsController as any);
+router.get("/farms/:farmId", getFarmCreditsController as any);
 
 export default router;

@@ -4,7 +4,6 @@ import { authenticate, authorize } from "../Middlewares/auth.middleware";
 
 const router = Router();
 
-// Only admins can seed the database
-router.post("/seed", authenticate, authorize("admin"), seedController);
+router.post("/seed", authenticate as any, authorize("admin") as any, seedController as any);
 
 export default router;

@@ -109,7 +109,7 @@ export const logPracticeActivity = async (
       logger.info(`Evidence uploaded for activity ${activityLog._id}`);
 
       // Trigger AI Verification asynchronously
-      verifyActivityEvidence(evidence._id as string).catch(err => 
+      verifyActivityEvidence(evidence._id.toString()).catch(err => 
         logger.error("Automatic AI Verification trigger failed:", err)
       );
 
@@ -120,7 +120,7 @@ export const logPracticeActivity = async (
   
   // Trigger Carbon Calculation
   try {
-    await calculateCarbonForActivity(activityLog._id as string);
+    await calculateCarbonForActivity(activityLog._id.toString());
   } catch (err) {
     logger.error("Automatic carbon calculation trigger failed:", err);
   }

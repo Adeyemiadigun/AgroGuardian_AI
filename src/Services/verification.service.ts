@@ -18,7 +18,7 @@ export const verifyActivityEvidence = async (evidenceId: string) => {
 
     // 1. Download image and convert to base64
     const response = await axios.get(evidence.imageUrl, { responseType: 'arraybuffer' });
-    const imageBase64 = Buffer.from(response.data, 'binary').toString('base64');
+    const imageBase64 = Buffer.from(response.data as any, 'binary').toString('base64');
 
     // 2. Call AI Verification
     const aiResult = await verifyPracticeImage(imageBase64, practice.name);

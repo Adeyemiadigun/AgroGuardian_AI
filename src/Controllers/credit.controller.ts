@@ -35,7 +35,7 @@ export const generateCreditsController = async (req: AuthRequest, res: Response)
 
 export const getFarmCreditsController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { farmId } = req.params;
+        const farmId = req.params.farmId as string; 
         const userId = req.user!.userId as string;
     
         const credits = await getFarmCredits(farmId, userId);

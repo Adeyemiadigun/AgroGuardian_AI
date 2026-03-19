@@ -10,7 +10,7 @@ import logger from "../Utils/logger";
 
 export const createCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { farmId } = req.params;
+    const farmId = req.params.farmId as string;
     const userId = req.user!.userId as string;
 
     const cropSeason = await createCropSeason(userId, farmId, req.body);
@@ -60,7 +60,7 @@ export const logActivityController = async (req: AuthRequest, res: Response): Pr
 
 export const getFarmActivitiesController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { farmId } = req.params;
+        const farmId = req.params.farmId as string;
         const userId = req.user!.userId as string;
     
         const activities = await getFarmActivities(farmId, userId);
@@ -80,7 +80,7 @@ export const getFarmActivitiesController = async (req: AuthRequest, res: Respons
 
 export const getFarmCropSeasonsController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const { farmId } = req.params;
+        const farmId = req.params.farmId as string;
         const userId = req.user!.userId as string;
     
         const seasons = await getFarmCropSeasons(farmId, userId);
