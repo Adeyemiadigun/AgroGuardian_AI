@@ -23,6 +23,8 @@ const farmSchema = new Schema<IFarm>(
         status: { type: String, enum: ["active", "inactive", "fallow"], default:"active" },
         irrigationType: { type: String, enum:["drip", "sprinkler", "flood", "rainfed", "none"] , required: true},
         soilType: { type: String, enum:["clay", "sandy", "loamy", "silty", "peaty", "laterite", "clay-loam", "sandy-loam"], required: true },
+        baselinePractices: [{ type: String }],
+        initialSoilCarbon: { type: Number },
         establishedDate:{ type : Date }
     },{
         timestamps: true   

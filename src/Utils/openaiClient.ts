@@ -65,6 +65,52 @@ export const analyzeCropImage = async (
   }
 };
 
+const VERIFICATION_PROMPT = `You are an expert agricultural auditor for AgroGuardian AI.
+Analyze the provided farm image and determine if it shows evidence of a specific regenerative practice.
+
+Return a JSON response:
+{
+  "isVerified": true | false,
+  "confidence": 0-100,
+  "observations": "Brief description of what you see",
+  "reasoning": "Why you reached this conclusion"
+}
+
+Practice to verify: `;
+
+export const verifyPracticeImage = async (
+  imageBase64: string,
+  practiceName: string
+): Promise<any> => {
+  const prompt = `${VERIFICATION_PROMPT} "${practiceName}". Does the image show evidence of this practice?`;
+  const result = await api.chat.completions.create({
+    model: getModelName(),
+    messages: [
+      { role: 'system', content: VERIFICATION_PROMPT },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${imageBase64}`,
+            },
+          },
+        ],
+      },
+    ],
+    response_format: { type: 'json_object' },
+  } as any);
+  const message = result.choices[0].message.content;
+  try {
+    return JSON.parse(message || '{}');
+  } catch {
+    logger.error('Failed to parse AI verification response:', message);
+    throw new Error('Failed to parse AI verification response');
+  }
+};
+
 export const chatWithDiagnosis = async (
   userMessage: string,
   chatHistory: { role: 'user' | 'assistant'; content: string }[],

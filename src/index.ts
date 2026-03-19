@@ -13,6 +13,9 @@ import authRoutes from './Routes/auth.routes';
 import farmRoutes from './Routes/farm.routes';
 import diagnosisRoutes from './Routes/diagnosis.routes';
 import weatherRoutes from './Routes/weather.routes';
+import adminRoutes from './Routes/admin.routes';
+import practiceRoutes from './Routes/practice.routes';
+import creditRoutes from './Routes/credit.routes';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -27,6 +30,9 @@ app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);
 app.use('/api/diagnosis', diagnosisRoutes);
 app.use('/api/weather', weatherRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/practices', practiceRoutes);
+app.use('/api/credits', creditRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')
