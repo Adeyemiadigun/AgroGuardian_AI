@@ -2,9 +2,11 @@ import CropDiagnosis from "../Models/CropDiagnosis";
 import DiagnosisChat from "../Models/DiagnosisChat";
 import Farm from "../Models/Farm";
 import cloudinary from "../Config/cloudinary";
-import { analyzeCropImage, chatWithDiagnosis, getModelName } from "../Utils/geminiClient";
 import logger from "../Utils/logger";
+import { addDiagnosisJob } from "../Queues/diagnosis.queue";
 import { addResilienceSyncJob } from "../Queues/resilience.queue";
+import { chatWithDiagnosis } from "../Utils/geminiClient";
+
 
 export const diagnoseCrop = async (
   farmId: string,
@@ -18,19 +20,17 @@ export const diagnoseCrop = async (
     throw new Error("Farm not found");
   }
 
-  const [uploadResult, aiResult] = await Promise.all([
-    new Promise<{ secure_url: string }>((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { folder: "agroguardian/diagnoses", resource_type: "image" },
-        (error, result) => {
-          if (error || !result) return reject(error || new Error("Upload failed"));
-          resolve(result);
-        }
-      );
-      stream.end(imageBuffer);
-    }),
-    analyzeCropImage(imageBuffer, mimeType, cropType)
-  ]);
+
+  const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "agroguardian/diagnoses", resource_type: "image" },
+      (error, result) => {
+        if (error || !result) return reject(error || new Error("Upload failed"));
+        resolve(result);
+      }
+    );
+    stream.end(imageBuffer);
+  });
 
   const imageUrl = uploadResult.secure_url;
 
@@ -39,32 +39,25 @@ export const diagnoseCrop = async (
     userId,
     imageUrl,
     cropType,
-    diagnosis: aiResult.diagnosis,
-    confidence: aiResult.confidence,
-    symptoms: aiResult.symptoms,
-    treatment: aiResult.treatment,
-    prevention: aiResult.prevention,
-    severity: aiResult.severity,
-    status: "detected",
-    aiModel: getModelName(),
+    diagnosis: "Analyzing...",
+    confidence: 0,
+    symptoms: [],
+    treatment: [],
+    prevention: [],
+    severity: "low",
+    status: "processing",
+    aiModel: "Pending...",
   });
 
-  await DiagnosisChat.create({
-    diagnosisId: diagnosis._id,
-    userId,
-    messages: [
-      {
-        role: "assistant",
-        content: `I've analyzed your ${cropType} image. Diagnosis: **${aiResult.diagnosis}** (${aiResult.confidence}% confidence, ${aiResult.severity} severity). You can ask me follow-up questions about treatment, prevention, or anything else.`,
-        timestamp: new Date(),
-      },
-    ],
+  await addDiagnosisJob({
+    diagnosisId: diagnosis._id.toString(),
+    imageUrl,
+    cropType,
+    farmId,
+    userId
   });
 
-  logger.info(`Crop diagnosis completed for farm ${farmId}: ${aiResult.diagnosis}`);
-
-  // Update resilience score after new diagnosis via background queue
-  addResilienceSyncJob(farmId, userId);
+  logger.info(`Diagnosis initiated for farm ${farmId}. Status: processing.`);
 
   return diagnosis;
 };
@@ -102,7 +95,6 @@ export const updateDiagnosisStatus = async (
   }
   logger.info(`Diagnosis ${diagnosisId} status updated to ${status}`);
 
-  // Update resilience score after status change via background queue
   addResilienceSyncJob(diagnosis.farmId.toString(), userId);
 
   return diagnosis;

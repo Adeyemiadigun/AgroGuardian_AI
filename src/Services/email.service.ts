@@ -1,11 +1,13 @@
 import logger from "../Utils/logger";
+import { addEmailToQueue } from "../Queues/email.queue";
 
 const BREVO_API_KEY = process.env.BREVO_API_KEY || "";
 const FROM_EMAIL = process.env.FROM_EMAIL || "noreply@agroguardian.ai";
 const FROM_NAME = "AgroGuardian AI";
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:3000";
 
-const sendBrevoEmail = async (
+
+export const sendBrevoEmail = async (
   to: string,
   subject: string,
   htmlContent: string
@@ -52,14 +54,9 @@ export const sendVerificationEmail = async (
     </div>
   `;
 
-  try {
-    await sendBrevoEmail(email, "Verify Your Email - AgroGuardian AI", htmlContent);
-    logger.info(`Verification email sent to ${email}`);
-  } catch (error) {
-    logger.error("Failed to send verification email", error);
-    throw new Error("Failed to send verification email");
-  }
+  await addEmailToQueue(email, "Verify Your Email - AgroGuardian AI", htmlContent);
 };
+
 
 export const sendPasswordResetEmail = async (
   email: string,
@@ -81,11 +78,5 @@ export const sendPasswordResetEmail = async (
     </div>
   `;
 
-  try {
-    await sendBrevoEmail(email, "Reset Your Password - AgroGuardian AI", htmlContent);
-    logger.info(`Password reset email sent to ${email}`);
-  } catch (error) {
-    logger.error("Failed to send password reset email", error);
-    throw new Error("Failed to send password reset email");
-  }
+  await addEmailToQueue(email, "Reset Your Password - AgroGuardian AI", htmlContent);
 };

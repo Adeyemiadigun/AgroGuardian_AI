@@ -12,7 +12,7 @@ const cropDiagnosisSchema = new Schema<ICropDiagnosis>({
     treatment: [{ type: String }],
     prevention: [{ type: String }],
     severity: { type: String, enum: ["low", "medium", "high", "critical"], required: true },
-    status: { type: String, enum: ["detected", "treating", "resolved"], default: "detected" },
+    status: { type: String, enum: ["processing", "detected", "treating", "resolved"], default: "processing" },
     aiModel: { type: String, required: true }
 },{
     timestamps: true

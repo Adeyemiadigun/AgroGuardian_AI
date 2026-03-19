@@ -13,15 +13,25 @@ import authRoutes from './Routes/auth.routes';
 import farmRoutes from './Routes/farm.routes';
 import diagnosisRoutes from './Routes/diagnosis.routes';
 import weatherRoutes from './Routes/weather.routes';
+import resilienceRoutes from './Routes/resilience.routes';
+
+// Workers & Queues
 import { initResilienceWorker } from './Workers/resilience.worker';
+import { initEmailWorker } from './Workers/email.worker';
+import { initWeatherSyncWorker } from './Workers/weatherSync.worker';
+import { initDailyWeatherSync } from './Queues/weatherSync.queue';
+import { initDiagnosisWorker } from './Workers/diagnosis.worker';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
 connectDB();
 
-// Initialize BullMQ Workers
 initResilienceWorker();
+initEmailWorker();
+initWeatherSyncWorker();
+initDailyWeatherSync(); 
+initDiagnosisWorker(); 
 
 app.use(cors());
 app.use(express.json());
@@ -31,6 +41,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);
 app.use('/api/diagnosis', diagnosisRoutes);
 app.use('/api/weather', weatherRoutes);
+app.use('/api/resilience', resilienceRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')

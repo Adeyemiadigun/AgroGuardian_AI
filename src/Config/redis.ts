@@ -10,6 +10,7 @@ export const redisConnection = new Redis({
   port: REDIS_PORT,
   password: REDIS_PASSWORD,
   maxRetriesPerRequest: null,
+  tls: REDIS_HOST !== "127.0.0.1" ? {} : undefined,
 });
 
 redisConnection.on("error", (error) => {

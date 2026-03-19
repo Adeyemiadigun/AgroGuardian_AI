@@ -13,7 +13,7 @@ export interface ICropDiagnosis extends Document {
     treatment: string[];
     prevention: string[];
     severity: "low" | "medium" | "high" | "critical";
-    status: "detected" | "treating" | "resolved";
+    status: "processing" | "detected" | "treating" | "resolved";
     aiModel: string;
     createdAt: Date;
     updatedAt: Date;
