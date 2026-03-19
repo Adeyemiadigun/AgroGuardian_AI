@@ -50,3 +50,11 @@ export interface IWeatherAlert  extends Document {
   message: string;
   acknowledged?: boolean;
 }
+
+
+export interface PlantingWindow {
+  date: Date;
+  score: number; 
+  reason: string;
+  isViable: boolean;
+}
