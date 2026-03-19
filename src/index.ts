@@ -14,14 +14,16 @@ import farmRoutes from './Routes/farm.routes';
 import diagnosisRoutes from './Routes/diagnosis.routes';
 import weatherRoutes from './Routes/weather.routes';
 import { initResilienceWorker } from './Workers/resilience.worker';
-import adminRoutes from './Routes/admin.routes';
 import practiceRoutes from './Routes/practice.routes';
 import creditRoutes from './Routes/credit.routes';
+import { seedDatabase } from './Services/seed.service';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-connectDB();
+connectDB().then(() => {
+    seedDatabase();
+});
 
 // Initialize BullMQ Workers
 initResilienceWorker();
@@ -34,7 +36,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);
 app.use('/api/diagnosis', diagnosisRoutes);
 app.use('/api/weather', weatherRoutes);
-app.use('/api/admin', adminRoutes);
 app.use('/api/practices', practiceRoutes);
 app.use('/api/credits', creditRoutes);
 

@@ -5,6 +5,17 @@ import logger from "../Utils/logger";
 
 export const seedDatabase = async () => {
   try {
+    // Check if data already exists to avoid duplicate seeding
+    const cropCount = await Crop.countDocuments();
+    const practiceCount = await FarmPractice.countDocuments();
+
+    if (cropCount > 0 && practiceCount > 0) {
+      logger.info("Database already contains reference data. Skipping auto-seed.");
+      return;
+    }
+
+    logger.info("Reference data missing. Starting automatic database seeding...");
+
     // 1. Seed Crops
     const crops = [
       { name: "Maize", category: "cereal", carbonMultiplier: 1.2 },
@@ -12,8 +23,6 @@ export const seedDatabase = async () => {
       { name: "Soybean", category: "legume", carbonMultiplier: 1.5 },
       { name: "Cocoa", category: "tree", carbonMultiplier: 2.5 },
     ];
-
-    await Crop.deleteMany({});
     const seededCrops = await Crop.insertMany(crops);
     logger.info(`Seeded ${seededCrops.length} crops`);
 
@@ -38,8 +47,6 @@ export const seedDatabase = async () => {
         isActive: true 
       },
     ];
-
-    await FarmPractice.deleteMany({});
     const seededPractices = await FarmPractice.insertMany(practices);
     logger.info(`Seeded ${seededPractices.length} practices`);
 
@@ -67,18 +74,10 @@ export const seedDatabase = async () => {
         carbonFactorPerHectarePerYear: 2.2,
       },
     ];
-
-    await CarbonFactor.deleteMany({});
     const seededFactors = await CarbonFactor.insertMany(carbonFactors);
     logger.info(`Seeded ${seededFactors.length} carbon factors`);
 
-    return {
-      crops: seededCrops.length,
-      practices: seededPractices.length,
-      carbonFactors: seededFactors.length,
-    };
   } catch (error: any) {
-    logger.error("Seeding error:", error);
-    throw new Error(`Seeding failed: ${error.message}`);
+    logger.error("Automatic seeding failed:", error);
   }
 };
