@@ -2,10 +2,34 @@ import { Response } from "express";
 import { AuthRequest } from "../Types/auth.types";
 import {  createFarm,  getFarmsByOwner,  getFarmById,  updateFarm,  deleteFarm,} from "../Services/farm.service";
 import logger from "../Utils/logger";
+import { createFarmSchema } from "../Validators/farm.validator";
 
 export const createFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const farm = await createFarm(req.body, req.user!.userId, req.file?.buffer);
+        let bodyData = req.body;
+        
+        // Parse metadata if it exists as a JSON string (sent via FormData)
+        if (req.body.metadata) {
+            try {
+                bodyData = JSON.parse(req.body.metadata);
+            } catch (e) {
+                res.status(400).json({ success: false, message: "Invalid metadata JSON format" });
+                return;
+            }
+        }
+
+        // Validate the reconstructed body
+        const validationResult = createFarmSchema.safeParse(bodyData);
+        if (!validationResult.success) {
+            const errors = validationResult.error.issues.map((issue) => ({
+                field: issue.path.join("."),
+                message: issue.message,
+            }));
+            res.status(400).json({ success: false, message: "Validation failed", errors });
+            return;
+        }
+
+        const farm = await createFarm(validationResult.data, req.user!.userId, req.file?.buffer);
         res.status(201).json({ 
             success: true, 
             message: "Farm created successfully",

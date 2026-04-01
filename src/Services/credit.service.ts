@@ -67,3 +67,14 @@ export const getFarmCredits = async (farmId: string, userId: string) => {
 
   return await CarbonCredits.find({ farmId }).sort({ issuedDate: -1 });
 };
+
+export const getAllUserCredits = async (userId: string) => {
+    // 1. Get all farms belonging to the user
+    const farms = await Farm.find({ owner: userId }, "_id");
+    const farmIds = farms.map(f => f._id);
+
+    // 2. Get credits for those farms
+    return await CarbonCredits.find({ farmId: { $in: farmIds } })
+        .populate("farmId", "name location")
+        .sort({ issuedDate: -1 });
+};

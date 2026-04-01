@@ -1,8 +1,13 @@
 import Farm from "../Models/Farm";
+import Crop from "../Models/Crop";
+import WeatherData from "../Models/WeatherData";
+import ClimateRisk from "../Models/ClimateRisk";
+import ResilienceProfile from "../Models/ResilienceProfile";
 import logger from "../Utils/logger";
 import {CreateFarmInput, UpdateFarmInput} from "../Validators/farm.validator";
 import cloudinary from "../Config/cloudinary";
 import axios from "axios";
+import { getClimateRisk } from "./weather.service";
 
 const WEATHER_API_KEY = process.env.WEATHER_API_KEY || "YOUR_OPENWEATHER_API_KEY";
 
@@ -45,7 +50,7 @@ const getCoordinatesFromAddress = async (location: CreateFarmInput["location"]):
 }
 
 export const createFarm = async (data: CreateFarmInput, ownerId: string, imageBuffer?: Buffer) => {
-    const { name, size, sizeUnit, crops, location, imageUrl: providedImageUrls, description, status, irrigationType, soilType, establishedDate } = data;
+    const { name, size, sizeUnit, location, imageUrl: providedImageUrls, description, status, irrigationType, soilType, establishedDate } = data;
 
     const existingFarm = await Farm.findOne({ name: name.trim(), owner: ownerId });
     if(existingFarm){
@@ -85,7 +90,6 @@ export const createFarm = async (data: CreateFarmInput, ownerId: string, imageBu
         name: name.trim(),
         size: size,
         sizeUnit: sizeUnit,
-        crops: crops,
         location: {
             address: location.address,
             city: location.city,
@@ -106,6 +110,11 @@ export const createFarm = async (data: CreateFarmInput, ownerId: string, imageBu
 
     logger.info(`Farm created: ${name} by user ${ownerId}`);
 
+    // Trigger climate risk/zone detection asynchronously
+    getClimateRisk(farm._id.toString()).catch(err => 
+        logger.error(`Initial climate risk sync failed for farm ${farm._id}:`, err)
+    );
+
     return {
         id: farm._id,
         location: farm.location,
@@ -114,19 +123,44 @@ export const createFarm = async (data: CreateFarmInput, ownerId: string, imageBu
 }
 
 export const getFarmsByOwner = async (ownerId: string) => {
-    const farms = await Farm.find({ owner: ownerId });
-    logger.info(`Farms retrieved for user ${ownerId}: ${farms.length} farm(s) found.`);
-    return farms;
+    const farms = await Farm.find({ owner: ownerId }).lean();
+    
+    // Enrich farms with crops, latest weather, risk and resilience data
+    const enrichedFarms = await Promise.all(farms.map(async (farm) => {
+        const [crops, latestWeather, latestRisk, latestResilience] = await Promise.all([
+            Crop.find({ farmId: farm._id }).lean(),
+            WeatherData.findOne({ farmId: farm._id }).sort({ timestamp: -1 }).select('current timestamp').lean(),
+            ClimateRisk.findOne({ farmId: farm._id }).sort({ timestamp: -1 }).lean(),
+            ResilienceProfile.findOne({ farmId: farm._id }).lean()
+        ]);
+
+        return {
+            ...farm,
+            crops,
+            latestWeather,
+            latestRisk,
+            latestResilience
+        };
+    }));
+
+    logger.info(`Farms retrieved and enriched for user ${ownerId}: ${enrichedFarms.length} farm(s) found.`);
+    return enrichedFarms;
 }
 
 export const getFarmById = async (farmId: string, ownerId: string) => {
-    const farm = await Farm.findOne({ _id: farmId, owner: ownerId });
+    const farm = await Farm.findOne({ _id: farmId, owner: ownerId }).lean();
     if(!farm){
         logger.warn(`Farm not found: Farm ID ${farmId} for user ${ownerId}`);
         throw new Error("Farm not found");
     }
+
+    const crops = await Crop.find({ farmId: farm._id }).lean();
+    
     logger.info(`Farm retrieved: ${farm.name} for user ${ownerId}`);
-    return farm;
+    return {
+        ...farm,
+        crops
+    };
 }
 
 export const updateFarm = async (farmId: string, ownerId: string, data: UpdateFarmInput) => {

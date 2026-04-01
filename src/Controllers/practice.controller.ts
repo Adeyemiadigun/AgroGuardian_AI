@@ -5,8 +5,29 @@ import {
   logPracticeActivity,
   getFarmActivities,
   getFarmCropSeasons,
+  addCropToFarm,
+  getFarmCrops,
+  getReferenceCrops,
+  getAllPractices,
 } from "../Services/practice.service";
 import logger from "../Utils/logger";
+
+export const getAllPracticesController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const practices = await getAllPractices();
+    res.status(200).json({
+      success: true,
+      message: "Practices retrieved successfully",
+      data: practices,
+    });
+  } catch (error: any) {
+    logger.error("Error getting practices", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get practices",
+    });
+  }
+};
 
 export const createCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -26,6 +47,66 @@ export const createCropSeasonController = async (req: AuthRequest, res: Response
     res.status(400).json({
       success: false,
       message: error.message || "Failed to create crop season",
+    });
+  }
+};
+
+export const addCropController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const farmId = req.params.farmId as string;
+    const userId = req.user!.userId as string;
+
+    const crop = await addCropToFarm(userId, farmId, req.body);
+
+    logger.info("Crop added to farm", { farmId, userId });
+    res.status(201).json({
+      success: true,
+      message: "Crop added successfully",
+      data: crop,
+    });
+  } catch (error: any) {
+    logger.error("Error adding crop", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to add crop",
+    });
+  }
+};
+
+export const getFarmCropsController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const farmId = req.params.farmId as string;
+    const userId = req.user!.userId as string;
+
+    const crops = await getFarmCrops(farmId, userId);
+    res.status(200).json({
+      success: true,
+      message: "Crops retrieved successfully",
+      data: crops,
+    });
+  } catch (error: any) {
+    logger.error("Error getting crops", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get crops",
+    });
+  }
+};
+
+export const getReferenceCropsController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const category = req.query.category as string;
+    const crops = await getReferenceCrops(category);
+    res.status(200).json({
+      success: true,
+      message: "Reference crops retrieved successfully",
+      data: crops,
+    });
+  } catch (error: any) {
+    logger.error("Error getting reference crops", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get reference crops",
     });
   }
 };

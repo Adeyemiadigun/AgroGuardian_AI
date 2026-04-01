@@ -7,7 +7,6 @@ const farmSchema = new Schema<IFarm>(
         name: { type: String, required: true , trim: true},
         size: { type: Number, required: true },
         sizeUnit: { type: String, enum: ["acres", "hectares"], required: true },
-        crops: [{ type: String }],
         location: {
             address: { type: String, required: true },
             city: { type: String, required: true },
@@ -22,9 +21,13 @@ const farmSchema = new Schema<IFarm>(
         description: { type: String },
         status: { type: String, enum: ["active", "inactive", "fallow"], default:"active" },
         irrigationType: { type: String, enum:["drip", "sprinkler", "flood", "rainfed", "none"] , required: true},
-        soilType: { type: String, enum:["clay", "sandy", "loamy", "silty", "peaty", "laterite", "clay-loam", "sandy-loam"], required: true },
+        soilType: [{ type: String, enum:["clay", "sandy", "loamy", "silty", "peaty", "laterite", "clay-loam", "sandy-loam"], required: true }],
         baselinePractices: [{ type: String }],
         initialSoilCarbon: { type: Number },
+        climateZone: { 
+            type: String, 
+            enum: ["tropical", "arid", "temperate", "continental", "polar"]
+        },
         establishedDate:{ type : Date }
     },{
         timestamps: true   

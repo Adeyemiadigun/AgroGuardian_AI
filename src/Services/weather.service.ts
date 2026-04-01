@@ -125,6 +125,40 @@ const generateAlerts = async (farmId: string, risks: any) => {
 };
 
 
+
+const calculatePrecisionWindows = (forecastList: any[]) => {
+  const windows: any = { planting: [], harvesting: [], spraying: [] };
+  forecastList.forEach(item => {
+    const dateTime = new Date(item.dt * 1000);
+    const date = dateTime.toISOString().split('T')[0];
+    const time = dateTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const { temp, humidity } = item.main;
+    const windSpeed = item.wind.speed * 3.6; // m/s to km/h
+    const rain = item.rain ? (item.rain['3h'] || 0) : 0;
+
+    if (temp >= 20 && temp <= 28 && humidity >= 50 && humidity <= 75) {
+      windows.planting.push({ date, time, reason: "Optimal temp/humidity" });
+    }
+    if (rain === 0 && humidity < 60 && windSpeed < 15) {
+      windows.harvesting.push({ date, time, reason: "Dry and calm" });
+    }
+    if (windSpeed < 5 && rain === 0) {
+      windows.spraying.push({ date, time, reason: "Low wind" });
+    }
+  });
+  return windows;
+};
+
+const determineClimateZone = (lat: number): "tropical" | "arid" | "temperate" | "continental" | "polar" => {
+  const absLat = Math.abs(lat);
+  if (absLat <= 23.5) return "tropical";
+  if (absLat <= 35) return "arid"; // Subtropical/Arid transition
+  if (absLat <= 50) return "temperate";
+  if (absLat <= 66.5) return "continental";
+  return "polar";
+};
+
+
 export const getClimateRisk = async (farmId: string) => {
       logger.info(`Fetching climate risk for farm ${farmId}`);
     const farm = await Farm.findById(farmId);
@@ -137,6 +171,14 @@ export const getClimateRisk = async (farmId: string) => {
     logger.debug('Farm location', { latitude, longitude });
 
     try {
+      // Update farm climate zone if not set
+      const climateZone = determineClimateZone(latitude);
+      if (farm.climateZone !== climateZone) {
+        farm.climateZone = climateZone;
+        await farm.save();
+        logger.info(`Updated farm ${farmId} climate zone to ${climateZone}`);
+      }
+
       logger.info('Requesting weather data from OpenWeather API');
       const [currentRes, forecastRes] = await Promise.all([
         axios.get(`${BASE_URL}/weather`, {
@@ -180,6 +222,7 @@ export const getClimateRisk = async (farmId: string) => {
       const risks = calculateRisks(currentRaw, forecastRaw);
       logger.debug('Calculated risks', risks);
       const plantingWindow = calculatePlantingWindow(forecastRaw);
+      const precisionWindows = calculatePrecisionWindows(forecastRaw);
       logger.debug('Calculated planting window', plantingWindow);
 
       const climateRisk = await ClimateRisk.create({
@@ -197,7 +240,8 @@ export const getClimateRisk = async (farmId: string) => {
 
       return {
         climateRisk,
-        plantingWindow
+        plantingWindow,
+        precisionWindows
       };
     } catch (error: any) {
       logger.error('Error in getClimateRisk', { error });

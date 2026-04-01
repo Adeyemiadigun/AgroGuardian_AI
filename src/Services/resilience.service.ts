@@ -1,6 +1,7 @@
 import Farm from "../Models/Farm";
 import CropDiagnosis from "../Models/CropDiagnosis";
 import ClimateRisk from "../Models/ClimateRisk";
+import Crop from "../Models/Crop";
 import ResilienceProfile from "../Models/ResilienceProfile";
 import logger from "../Utils/logger";
 
@@ -12,8 +13,9 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
       throw new Error("Farm not found");
     }
 
-    const diagnoses = await CropDiagnosis.find({ farm: farmId, user: userId });
-    const climateRisks = await ClimateRisk.find({ farm: farmId }).sort({ timestamp: -1 }).limit(10);
+    const diagnoses = await CropDiagnosis.find({ farmId: farmId, userId: userId });
+    const climateRisks = await ClimateRisk.find({ farmId: farmId }).sort({ timestamp: -1 }).limit(10);
+    const crops = await Crop.find({ farmId });
 
     const totalDiagnoses = diagnoses.length;
     const resolvedDiagnoses = diagnoses.filter((d) => d.status === "resolved").length;
@@ -25,7 +27,7 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
     ).length;
     const climateScore = Math.max(0, 100 - highRiskEvents * 10);
 
-    const cropCount = farm.crops.length;
+    const cropCount = crops.length;
     let diversityScore = 0;
     if (cropCount >= 4) diversityScore = 100;
     else if (cropCount >= 2) diversityScore = 80;
@@ -52,7 +54,7 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
     }
 
     const profile = await ResilienceProfile.findOneAndUpdate(
-      { farm: farmId, user: userId },
+      { farmId: farmId as any, userId: userId as any },
       {
         $set: {
           overallScore,
@@ -83,7 +85,7 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
 };
 
 export const getResilienceProfile = async (farmId: string, userId: string) => {
-  const profile = await ResilienceProfile.findOne({ farm: farmId, user: userId });
+  const profile = await ResilienceProfile.findOne({ farmId: farmId as any, userId: userId as any });
   if (!profile) {
     return await updateResilienceProfile(farmId, userId);
   }

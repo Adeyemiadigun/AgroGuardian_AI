@@ -1,13 +1,5 @@
 import mongoose, { Schema } from "mongoose";
-
 import { ICarbonFactors } from "../Types/farm.practices.types";
-
-// export interface ICarbonFactors extends Document {
-//   practiceId: IPractices["_id"];
-//   cropId: ICrop["_id"];
-//   soilType: string;
-//   carbonFactorPerHectarePerYear: number;
-// }
 
 const CarbonFactorsSchema = new Schema<ICarbonFactors>({
   practiceId: {
@@ -18,12 +10,17 @@ const CarbonFactorsSchema = new Schema<ICarbonFactors>({
   cropId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Crop",
-    required: true,
+    required: true, // Required as per feedback
   },
-  soilType: { type: String, required: true },
+  soilType: { 
+    type: String, 
+    enum: ["clay", "sandy", "loamy", "silty", "peaty", "laterite", "clay-loam", "sandy-loam"],
+    required: true 
+  },
   carbonFactorPerHectarePerYear: { type: Number, required: true },
   climateZone : {
     type: String,
+    enum: ["tropical", "arid", "temperate", "continental", "polar"],
     required: true
   },
   createdAt: {

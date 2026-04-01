@@ -6,13 +6,12 @@ export interface IFarm extends Document {
     name: string;
     size: number; 
     sizeUnit: "acres" | "hectares";
-    crops: string[]; 
     location: ILocation;
     imageUrl?: string[];
     description?: string;
     status: "active" | "inactive" | "fallow";
     irrigationType: "drip" | "sprinkler" | "flood" | "rainfed" | "none";
-    soilType: "clay" | "sandy" | "loamy" | "silty" | "peaty" | "laterite" | "clay-loam"| "sandy-loam";
+    soilType: ("clay" | "sandy" | "loamy" | "silty" | "peaty" | "laterite" | "clay-loam"| "sandy-loam")[];
     climateZone: "tropical" | "arid" | "temperate" | "continental" | "polar";
     baselinePractices: string[];
     initialSoilCarbon?: number;

@@ -1,43 +1,48 @@
 import CropDiagnosis from "../Models/CropDiagnosis";
 import DiagnosisChat from "../Models/DiagnosisChat";
 import Farm from "../Models/Farm";
+import User from "../Models/User";
+import WeatherData from "../Models/WeatherData";
 import cloudinary from "../Config/cloudinary";
 import logger from "../Utils/logger";
 import { addDiagnosisJob } from "../Queues/diagnosis.queue";
 import { addResilienceSyncJob } from "../Queues/resilience.queue";
 import { chatWithDiagnosis } from "../Utils/geminiClient";
-
+import { createNotification } from "./notification.service";
+import { sendBrevoEmail } from "./email.service";
 
 export const diagnoseCrop = async (
   farmId: string,
   userId: string,
   cropType: string,
-  imageBuffer: Buffer,
-  mimeType: string
+  imageBuffers: Buffer[]
 ) => {
   const farm = await Farm.findOne({ _id: farmId, owner: userId });
   if (!farm) {
     throw new Error("Farm not found");
   }
 
+  const uploadResults = await Promise.all(
+    imageBuffers.map((buffer) => 
+      new Promise<{ secure_url: string }>((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "agroguardian/diagnoses", resource_type: "image" },
+          (error, result) => {
+            if (error || !result) return reject(error || new Error("Upload failed"));
+            resolve(result);
+          }
+        );
+        stream.end(buffer);
+      })
+    )
+  );
 
-  const uploadResult = await new Promise<{ secure_url: string }>((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder: "agroguardian/diagnoses", resource_type: "image" },
-      (error, result) => {
-        if (error || !result) return reject(error || new Error("Upload failed"));
-        resolve(result);
-      }
-    );
-    stream.end(imageBuffer);
-  });
-
-  const imageUrl = uploadResult.secure_url;
+  const imageUrls = uploadResults.map(r => r.secure_url);
 
   const diagnosis = await CropDiagnosis.create({
     farmId,
     userId,
-    imageUrl,
+    imageUrls,
     cropType,
     diagnosis: "Analyzing...",
     confidence: 0,
@@ -51,13 +56,13 @@ export const diagnoseCrop = async (
 
   await addDiagnosisJob({
     diagnosisId: diagnosis._id.toString(),
-    imageUrl,
+    imageUrls,
     cropType,
     farmId,
     userId
   });
 
-  logger.info(`Diagnosis initiated for farm ${farmId}. Status: processing.`);
+  logger.info(`Multi-image diagnosis initiated for farm ${farmId}. Status: processing.`);
 
   return diagnosis;
 };
@@ -93,9 +98,54 @@ export const updateDiagnosisStatus = async (
   if (!diagnosis) {
     throw new Error("Diagnosis not found");
   }
-  logger.info(`Diagnosis ${diagnosisId} status updated to ${status}`);
 
+  const user = await User.findById(userId);
+  if (user) {
+    await createNotification(
+      userId,
+      "Diagnosis Status Updated",
+      `Your ${diagnosis.cropType} diagnosis status is now: ${status}`,
+      "treatment",
+      `/diagnosis?farmId=${diagnosis.farmId}`
+    );
+
+    if (status === "resolved") {
+      await sendBrevoEmail(
+        user.email,
+        "🌱 Good News: Crop Health Resolved!",
+        `<h2>Success!</h2><p>Your ${diagnosis.cropType} diagnosis has been marked as resolved. Keep up the good work!</p>`
+      );
+    }
+  }
+
+  logger.info(`Diagnosis ${diagnosisId} status updated to ${status}`);
   addResilienceSyncJob(diagnosis.farmId.toString(), userId);
+  return diagnosis;
+};
+
+export const toggleTreatmentTask = async (
+  diagnosisId: string,
+  userId: string,
+  taskId: string
+) => {
+  const diagnosis = await CropDiagnosis.findOne({ _id: diagnosisId, userId });
+  if (!diagnosis) throw new Error("Diagnosis not found");
+
+  const taskIndex = diagnosis.treatmentPlan.findIndex(t => (t as any)._id.toString() === taskId);
+  if (taskIndex === -1) throw new Error("Task not found in treatment plan");
+
+  diagnosis.treatmentPlan[taskIndex].isCompleted = !diagnosis.treatmentPlan[taskIndex].isCompleted;
+  await diagnosis.save();
+
+  const user = await User.findById(userId);
+  if (user && diagnosis.treatmentPlan[taskIndex].isCompleted) {
+    await createNotification(
+      userId,
+      "Task Completed",
+      `Great job! You've completed: ${diagnosis.treatmentPlan[taskIndex].task}`,
+      "treatment"
+    );
+  }
 
   return diagnosis;
 };
@@ -122,6 +172,8 @@ export const sendChatMessage = async (
     content: msg.content,
   }));
 
+  const farm = await Farm.findById(diagnosis.farmId);
+  const latestWeather = await WeatherData.findOne({ farmId: diagnosis.farmId }).sort({ timestamp: -1 });
 
   const aiResponse = await chatWithDiagnosis(message, chatHistory, {
     cropType: diagnosis.cropType,
@@ -129,6 +181,13 @@ export const sendChatMessage = async (
     severity: diagnosis.severity,
     symptoms: diagnosis.symptoms,
     treatment: diagnosis.treatment,
+    environment: farm && latestWeather ? {
+      temperature: latestWeather.current.temperature,
+      humidity: latestWeather.current.humidity,
+      weather: latestWeather.current.weatherDescription,
+      soilType: farm.soilType,
+      location: `${farm.location.city}, ${farm.location.country}`
+    } : undefined
   });
 
   chat.messages.push({ role: "assistant", content: aiResponse, timestamp: new Date() });

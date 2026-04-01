@@ -17,6 +17,7 @@ export interface IPracticeActivityLogs extends Document {
   practiceId: IPractices["_id"];
   cropSeasonId?: ICropSeason["_id"];
   cropId: ICrop["_id"]; // add this
+  soilType: "clay" | "sandy" | "loamy" | "silty" | "peaty" | "laterite" | "clay-loam"| "sandy-loam";
   startDate: Date;
   endDate: Date;
   size: number;
@@ -60,8 +61,10 @@ export interface ICarbonCredit extends Document {
   updatedAt: Date;
 }
 export interface ICrop extends Document {
+  farmId: IFarm["_id"];
+  owner: IUser["_id"];
   name: string;
-  category: "cereal" | "legume" | "vegetable" | "tree";
+  category: "cereal" | "legume" | "tuber" | "vegetable" | "fruit" | "beverage" | "oil" | "fiber" | "spice" | "latex" | "forage";
   carbonMultiplier: number;
   createdAt: Date;
   updatedAt: Date;

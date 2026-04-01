@@ -12,15 +12,11 @@ export const initDiagnosisWorker = () => {
   const worker = new Worker(
     DIAGNOSIS_QUEUE,
     async (job: Job) => {
-      const { diagnosisId, imageUrl, cropType, farmId, userId } = job.data;
-      logger.info(`AI Worker analyzing diagnosis: ${diagnosisId}`);
+      const { diagnosisId, imageUrls, cropType, farmId, userId } = job.data;
+      logger.info(`AI Worker analyzing diagnosis: ${diagnosisId} with ${imageUrls?.length || 0} images`);
 
       try {
-        const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
-        const buffer = Buffer.from(response.data as any, 'binary');
-        const mimeType = response.headers['content-type'] || 'image/jpeg';
-
-        const aiResult = await analyzeCropImage(buffer, mimeType, cropType);
+        const aiResult = await analyzeCropImage(imageUrls, cropType);
 
         const diagnosis = await CropDiagnosis.findByIdAndUpdate(
           diagnosisId,
@@ -29,6 +25,7 @@ export const initDiagnosisWorker = () => {
             confidence: aiResult.confidence,
             symptoms: aiResult.symptoms,
             treatment: aiResult.treatment,
+            treatmentPlan: aiResult.treatmentPlan,
             prevention: aiResult.prevention,
             severity: aiResult.severity,
             status: "detected",

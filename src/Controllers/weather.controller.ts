@@ -7,9 +7,17 @@ import Farm from "../Models/Farm";
 import logger from "../Utils/logger";
 import mongoose from "mongoose";
 
-const findUserFarm = async (userId: string) => {
-  const farm = await Farm.findOne({ owner: userId });
+const findUserFarm = async (userId: string, farmId?: string) => {
+  const query: any = { owner: userId };
+  if (farmId && mongoose.Types.ObjectId.isValid(farmId)) {
+    query._id = farmId;
+  }
+
+  const farm = await Farm.findOne(query);
   if (!farm) {
+    if (farmId) {
+      throw new Error("Farm not found or you do not have permission to access it.");
+    }
     throw new Error("No farm associated with this account. Please create a farm first.");
   }
   return farm;
@@ -19,11 +27,12 @@ const findUserFarm = async (userId: string) => {
 export const getFarmRisk = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
-    const farm = await findUserFarm(userId);
+    const { farmId: queryFarmId } = req.query;
+    const farm = await findUserFarm(userId, queryFarmId as string);
     const farmId = (farm._id as mongoose.Types.ObjectId).toString();
-    
+
     const intelligence = await getClimateRisk(farmId);
-    
+
     const alerts = await WeatherAlert.find({ farmId: farm._id, acknowledged: false })
       .sort({ timestamp: -1 })
       .limit(5);
@@ -35,12 +44,14 @@ export const getFarmRisk = async (req: AuthRequest, res: Response): Promise<void
         data: {
             risk: intelligence.climateRisk,
             plantingWindow: intelligence.plantingWindow,
-            alerts: alerts
+            precisionWindows: intelligence.precisionWindows,
+            alerts: alerts,
+            location: farm.location
         }
     });
   } catch (error: any) {
     logger.error("Error generating weather intelligence", error);
-    res.status(error.message.includes("No farm associated") ? 404 : 400).json({
+    res.status(error.message.includes("not found") ? 404 : 400).json({
       success: false,
       message: error.message || "An error occurred while fetching weather data."
     });
@@ -51,9 +62,10 @@ export const getFarmRisk = async (req: AuthRequest, res: Response): Promise<void
 export const getCurrentWeather = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
-    const farm = await findUserFarm(userId);
+    const { farmId: queryFarmId } = req.query;
+    const farm = await findUserFarm(userId, queryFarmId as string);
     const farmId = farm._id as mongoose.Types.ObjectId;
-    
+
     const latestWeather = await WeatherData.findOne({ farmId: farmId })
       .sort({ timestamp: -1 });
 
@@ -66,7 +78,10 @@ export const getCurrentWeather = async (req: AuthRequest, res: Response): Promis
       res.status(200).json({
         success: true,
         message: "Current weather retrieved (freshly updated)",
-        data: freshWeather
+        data: {
+          ...freshWeather?.toObject(),
+          location: farm.location
+        }
       });
       return;
     }
@@ -75,11 +90,14 @@ export const getCurrentWeather = async (req: AuthRequest, res: Response): Promis
     res.status(200).json({
       success: true,
       message: "Current weather retrieved from last snapshot",
-      data: latestWeather
+      data: {
+        ...latestWeather.toObject(),
+        location: farm.location
+      }
     });
   } catch (error: any) {
     logger.error("Error retrieving current weather", error);
-    res.status(error.message.includes("No farm associated") ? 404 : 400).json({
+    res.status(error.message.includes("not found") ? 404 : 400).json({
       success: false,
       message: error.message || "Failed to retrieve current weather"
     });
@@ -90,22 +108,26 @@ export const getCurrentWeather = async (req: AuthRequest, res: Response): Promis
 export const getRiskHistory = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
         const userId = req.user!.userId;
-        const farm = await findUserFarm(userId);
+        const { farmId: queryFarmId } = req.query;
+        const farm = await findUserFarm(userId, queryFarmId as string);
         const farmId = (farm._id as mongoose.Types.ObjectId).toString();
 
         const trends = await getWeatherTrends(farmId);
-        
+
         logger.info("30-day weather trends retrieved", { farmId, userId });
-        res.status(200).json({ 
-            success: true, 
+        res.status(200).json({
+            success: true,
             message: "30-day weather trends retrieved for your farm",
-            data: trends 
+            data: {
+                trends,
+                location: farm.location
+            }
         });
     } catch (error: any) {
         logger.error("Error fetching risk history", error);
-        res.status(error.message.includes("No farm associated") ? 404 : 400).json({ 
-            success: false, 
-            message: error.message || "Failed to fetch risk history" 
+        res.status(error.message.includes("not found") ? 404 : 400).json({
+            success: false,
+            message: error.message || "Failed to fetch risk history"
         });
     }
 };

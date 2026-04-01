@@ -16,8 +16,13 @@ const PracticeActivityLogsSchema = new Schema<IPracticeActivityLogs>({
   },
   cropId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Crops",
+    ref: "Crop",
     required: true,
+  },
+  soilType: { 
+    type: String, 
+    enum: ["clay", "sandy", "loamy", "silty", "peaty", "laterite", "clay-loam", "sandy-loam"],
+    required: true 
   },
   appliedBy: {
     type: mongoose.Schema.Types.ObjectId,

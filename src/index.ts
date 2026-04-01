@@ -18,6 +18,7 @@ import weatherRoutes from './Routes/weather.routes';
 import resilienceRoutes from './Routes/resilience.routes';
 import practiceRoutes from './Routes/practice.routes';
 import creditRoutes from './Routes/credit.routes';
+import notificationRoutes from './Routes/notification.routes';
 
 // Workers & Queues
 import { initResilienceWorker } from './Workers/resilience.worker';
@@ -26,15 +27,10 @@ import { initWeatherSyncWorker } from './Workers/weatherSync.worker';
 import { initDailyWeatherSync } from './Queues/weatherSync.queue';
 import { initDiagnosisWorker } from './Workers/diagnosis.worker';
 
-// Services
-import { seedDatabase } from './Services/seed.service';
-
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
 
-connectDB().then(() => {
-    seedDatabase();
-});
+connectDB()
 
 // Initialize Workers
 initResilienceWorker();
@@ -58,6 +54,7 @@ app.use('/api/weather', weatherRoutes);
 app.use('/api/resilience', resilienceRoutes);
 app.use('/api/practices', practiceRoutes);
 app.use('/api/credits', creditRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')

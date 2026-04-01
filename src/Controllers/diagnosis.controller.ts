@@ -7,49 +7,50 @@ import {
   updateDiagnosisStatus,
   sendChatMessage,
   getChatHistory,
+  toggleTreatmentTask,
 } from "../Services/diagnosis.service";
 import logger from "../Utils/logger";
 
 export const diagnoseController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    if (!req.file) {
-      res.status(400).json({ success: false, message: "Crop image is required" });
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      res.status(400).json({ success: false, message: "At least one crop image is required" });
       return;
     }
 
     const { farmId, cropType } = req.body;
     const userId = req.user!.userId as string;
+    const imageBuffers = files.map(file => file.buffer);
 
     const diagnosis = await diagnoseCrop(
       farmId,
       userId,
       cropType,
-      req.file.buffer,
-      req.file.mimetype
+      imageBuffers
     );
 
-    logger.info("Diagnosis created", { diagnosisId: diagnosis._id, userId });
+    logger.info("Diagnosis initiated", { diagnosisId: diagnosis._id, userId, imageCount: imageBuffers.length });
     res.status(201).json({
       success: true,
-      message: "Crop diagnosis completed",
+      message: "Crop diagnosis initiated. Analysis is running in the background.",
       data: diagnosis,
     });
   } catch (error: any) {
-    logger.error("Diagnosis error", error);
+    logger.error("Diagnosis initiation error", error);
     res.status(400).json({
       success: false,
-      message: error.message || "Crop diagnosis failed",
+      message: error.message || "Failed to initiate crop diagnosis",
     });
   }
 };
 
 export const getDiagnosesByFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = Array.isArray(req.params.farmId) ? req.params.farmId[0] : req.params.farmId;
+    const farmId = req.params.farmId;
     const userId = req.user!.userId as string;
 
     const diagnoses = await getDiagnosesByFarm(farmId, userId);
-    logger.info("Diagnoses retrieved", { farmId, userId, count: diagnoses.length });
     res.status(200).json({
       success: true,
       message: "Diagnoses retrieved successfully",
@@ -66,11 +67,10 @@ export const getDiagnosesByFarmController = async (req: AuthRequest, res: Respon
 
 export const getDiagnosisController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = Array.isArray(req.params.diagnosisId) ? req.params.diagnosisId[0] : req.params.diagnosisId;
+    const diagnosisId = req.params.diagnosisId;
     const userId = req.user!.userId as string;
 
     const diagnosis = await getDiagnosisById(diagnosisId, userId);
-    logger.info("Diagnosis retrieved", { diagnosisId, userId });
     res.status(200).json({
       success: true,
       message: "Diagnosis retrieved successfully",
@@ -87,11 +87,10 @@ export const getDiagnosisController = async (req: AuthRequest, res: Response): P
 
 export const updateStatusController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = Array.isArray(req.params.diagnosisId) ? req.params.diagnosisId[0] : req.params.diagnosisId;
+    const diagnosisId = req.params.diagnosisId;
     const userId = req.user!.userId as string;
 
     const diagnosis = await updateDiagnosisStatus(diagnosisId, userId, req.body.status);
-    logger.info("Diagnosis status updated", { diagnosisId, userId, status: req.body.status });
     res.status(200).json({
       success: true,
       message: "Diagnosis status updated",
@@ -108,11 +107,10 @@ export const updateStatusController = async (req: AuthRequest, res: Response): P
 
 export const sendChatController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = Array.isArray(req.params.diagnosisId) ? req.params.diagnosisId[0] : req.params.diagnosisId;
+    const diagnosisId = req.params.diagnosisId;
     const userId = req.user!.userId as string;
 
     const result = await sendChatMessage(diagnosisId, userId, req.body.message);
-    logger.info("Chat message sent", { diagnosisId, userId });
     res.status(200).json({
       success: true,
       message: "Chat message sent",
@@ -129,11 +127,10 @@ export const sendChatController = async (req: AuthRequest, res: Response): Promi
 
 export const getChatController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = Array.isArray(req.params.diagnosisId) ? req.params.diagnosisId[0] : req.params.diagnosisId;
+    const diagnosisId = req.params.diagnosisId;
     const userId = req.user!.userId as string;
 
     const chat = await getChatHistory(diagnosisId, userId);
-    logger.info("Chat history retrieved", { diagnosisId, userId });
     res.status(200).json({
       success: true,
       message: "Chat history retrieved",
@@ -144,6 +141,26 @@ export const getChatController = async (req: AuthRequest, res: Response): Promis
     res.status(400).json({
       success: false,
       message: error.message || "Failed to retrieve chat history",
+    });
+  }
+};
+
+export const toggleTaskController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { diagnosisId, taskId } = req.params;
+    const userId = req.user!.userId as string;
+
+    const diagnosis = await toggleTreatmentTask(diagnosisId, userId, taskId);
+    res.status(200).json({
+      success: true,
+      message: "Task status updated",
+      data: diagnosis,
+    });
+  } catch (error: any) {
+    logger.error("Error toggling task", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to update task status",
     });
   }
 };

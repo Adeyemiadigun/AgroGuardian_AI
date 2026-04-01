@@ -1,4 +1,5 @@
 import CarbonCalculation from "../Models/CarbonCalculations";
+import CarbonCredits from "../Models/CarbonCredits";
 import PracticeActivityLog from "../Models/PracticeActivityLogs";
 import CarbonFactor from "../Models/CarbonFactor";
 import Crop from "../Models/Crop";
@@ -6,6 +7,10 @@ import Farm from "../Models/Farm";
 import FarmPractice from "../Models/FarmPractice";
 import logger from "../Utils/logger";
 
+/**
+ * Carbon Calculation Engine
+ * Formula: Carbon = Area × CarbonFactor × CropMultiplier × Duration
+ */
 export const calculateCarbonForActivity = async (activityLogId: string) => {
   try {
     const log = await PracticeActivityLog.findById(activityLogId);
@@ -22,50 +27,107 @@ export const calculateCarbonForActivity = async (activityLogId: string) => {
 
     // 1. Additionality Check
     if (farm.baselinePractices.includes(practice.name)) {
-      logger.info(`Additionality check failed: ${practice.name} is a baseline practice for farm ${farm._id}. No carbon credits generated.`);
+      logger.info(`Additionality check failed: ${practice.name} is a baseline practice for farm ${farm._id}.`);
       return null;
     }
 
-    // 2. Find Carbon Factor
-    // We look for a factor matching the practice, crop, soil type, and climate zone
+    // 2. Dynamic Factor Lookup
+    // We now use soilType from the LOG (picked by user) and required cropId
+    // Auto-determine climate zone from latitude if not set
+    if (!farm.climateZone) {
+      const lat = farm.location?.coordinates?.latitude;
+      if (lat !== undefined) {
+        const absLat = Math.abs(lat);
+        let zone: "tropical" | "arid" | "temperate" | "continental" | "polar" = "tropical";
+        if (absLat <= 23.5) zone = "tropical";
+        else if (absLat <= 35) zone = "arid";
+        else if (absLat <= 50) zone = "temperate";
+        else if (absLat <= 66.5) zone = "continental";
+        else zone = "polar";
+        
+        farm.climateZone = zone;
+        await farm.save();
+        logger.info(`Auto-set climate zone to ${zone} for farm ${farm._id} based on latitude ${lat}`);
+      } else {
+        // Default to tropical if no coordinates
+        farm.climateZone = "tropical";
+        await farm.save();
+        logger.info(`Defaulted climate zone to tropical for farm ${farm._id}`);
+      }
+    }
+
+    let carbonFactor = 0.8; // Default Base Rate: tons/hectare/year
+
     const factor = await CarbonFactor.findOne({
       practiceId: log.practiceId,
       cropId: log.cropId,
-      soilType: farm.soilType,
+      soilType: log.soilType,
       climateZone: farm.climateZone || "tropical",
     });
 
-    if (!factor) {
-      logger.warn(`No Carbon Factor found for Practice: ${practice.name}, Crop: ${crop.name}, Soil: ${farm.soilType}`);
-      // Fallback: Use a generic factor for the practice if specific one isn't found
-      // For now, let's just return null or throw an error to be safe
-      return null;
+    if (factor) {
+      carbonFactor = factor.carbonFactorPerHectarePerYear;
+    } else {
+      // DYNAMIC FALLBACK: Calculate weight based on Farm Profile
+      logger.info(`No specific factor found. Using dynamic farm-based calculation for log ${log._id}`);
+      
+      // Soil weighting
+      if (log.soilType.includes("clay") || log.soilType.includes("loamy")) carbonFactor *= 1.2;
+      if (log.soilType.includes("sandy")) carbonFactor *= 0.9;
+
+      // Climate weighting
+      const zone = farm.climateZone?.toLowerCase() || "tropical";
+      if (zone === "tropical") carbonFactor *= 1.25;
+      if (zone === "arid") carbonFactor *= 0.8;
     }
 
-    // 3. Calculate Duration in Years
+    // 3. Calculate Duration (Years)
     const startDate = new Date(log.startDate);
     const endDate = new Date(log.endDate);
-    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    const durationYears = diffDays / 365;
+    const durationMs = Math.abs(endDate.getTime() - startDate.getTime());
+    const durationYears = durationMs / (1000 * 60 * 60 * 24 * 365.25);
 
     // 4. Formula: Carbon = Area × CarbonFactor × CropMultiplier × Duration
-    const carbonSequestered = log.size * factor.carbonFactorPerHectarePerYear * crop.carbonMultiplier * durationYears;
+    // Ensure size is treated in hectares for the standard factor
+    const areaInHectares = log.sizeUnit === "acres" ? log.size * 0.404686 : log.size;
+    
+    const carbonSequestered = areaInHectares * carbonFactor * (crop.carbonMultiplier || 1.0) * (durationYears || 0.1);
 
     // 5. Store Calculation
     const calculation = await CarbonCalculation.create({
       farmId: farm._id,
       practiceLogId: log._id,
-      CarbonSequestered: carbonSequestered,
+      CarbonSequestered: Number(carbonSequestered.toFixed(4)),
       CalculationDate: new Date(),
       periodStart: log.startDate,
       periodEnd: log.endDate,
     });
 
-    logger.info(`Carbon sequestered calculation completed: ${carbonSequestered} tons for activity ${log._id}`);
+    logger.info(`Engine: Successfully calculated ${carbonSequestered.toFixed(4)} tons CO2e for log ${log._id}`);
+
+    // 6. Auto-generate Carbon Credit for this calculation
+    try {
+      const bufferMultiplier = 0.8; // 20% buffer pool holdback
+      const creditsToIssue = carbonSequestered * bufferMultiplier;
+
+      await CarbonCredits.create({
+        farmId: farm._id,
+        creditsEarned: Number(creditsToIssue.toFixed(4)),
+        status: "pending-verification",
+        issuedDate: new Date(),
+        periodStart: log.startDate,
+        periodEnd: log.endDate,
+      });
+
+      logger.info(`Auto-generated ${creditsToIssue.toFixed(4)} carbon credits for farm ${farm._id}`);
+    } catch (creditError: any) {
+      logger.error("Auto credit generation failed:", creditError);
+      // Don't throw - calculation succeeded, credit generation is secondary
+    }
+
     return calculation;
   } catch (error: any) {
-    logger.error("Carbon calculation error:", error);
+    logger.error("Carbon Engine Error:", error);
     throw error;
   }
 };

@@ -3,6 +3,7 @@ import { AuthRequest } from "../Types/auth.types";
 import {
   generateCreditsForFarm,
   getFarmCredits,
+  getAllUserCredits,
 } from "../Services/credit.service";
 import logger from "../Utils/logger";
 
@@ -51,4 +52,23 @@ export const getFarmCreditsController = async (req: AuthRequest, res: Response):
           message: error.message || "Failed to get credits",
         });
       }
+};
+
+export const getUserCreditsController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId as string;
+
+    const credits = await getAllUserCredits(userId);
+    res.status(200).json({
+      success: true,
+      message: "User credits retrieved successfully",
+      data: credits,
+    });
+  } catch (error: any) {
+    logger.error("Error getting user credits", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get user credits",
+    });
+  }
 };

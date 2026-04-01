@@ -5,12 +5,17 @@ import { IUser } from "./auth.types";
 export interface ICropDiagnosis extends Document {
     farmId: IFarm["_id"];
     userId: IUser["_id"];
-    imageUrl: string;
+    imageUrls: string[];
     cropType: string;
     diagnosis: string;
     confidence: number;
     symptoms: string[];
     treatment: string[];
+    treatmentPlan?: {
+        task: string;
+        timeframe: string;
+        isCompleted: boolean;
+    }[];
     prevention: string[];
     severity: "low" | "medium" | "high" | "critical";
     status: "processing" | "detected" | "treating" | "resolved";

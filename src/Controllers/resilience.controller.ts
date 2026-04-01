@@ -1,11 +1,12 @@
-import { Request, Response } from "express";
+import { Response } from "express";
+import { AuthRequest } from "../Types/auth.types";
 import { getResilienceProfile, updateResilienceProfile } from "../Services/resilience.service";
 import logger from "../Utils/logger";
 
-export const getFarmResilience = async (req: Request, res: Response): Promise<void> => {
+export const getFarmResilience = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const farmId = req.params.farmId as string;
-    const userId = (req as any).user._id;
+    const userId = req.user!.userId;
 
     const profile = await getResilienceProfile(farmId, userId);
     
@@ -19,10 +20,10 @@ export const getFarmResilience = async (req: Request, res: Response): Promise<vo
   }
 };
 
-export const triggerResilienceSync = async (req: Request, res: Response): Promise<void> => {
+export const triggerResilienceSync = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const farmId = req.params.farmId as string;
-    const userId = (req as any).user._id;
+    const userId = req.user!.userId;
 
     const profile = await updateResilienceProfile(farmId, userId);
     

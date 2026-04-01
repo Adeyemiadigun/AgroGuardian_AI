@@ -5,10 +5,79 @@ import FarmPractice from "../Models/FarmPractice";
 import PracticeActivityLog from "../Models/PracticeActivityLogs";
 import Evidence from "../Models/Evidence";
 import logger from "../Utils/logger";
-import { ICropSeason, IPracticeActivityLogs } from "../Types/farm.practices.types";
+import { ICrop, ICropSeason, IPracticeActivityLogs } from "../Types/farm.practices.types";
 import { calculateCarbonForActivity } from "./carbon.service";
 import { verifyActivityEvidence } from "./verification.service";
 import cloudinary from "../Config/cloudinary";
+const CATEGORY_MULTIPLIERS = {
+  cereal: 1.1,
+  legume: 1.5,
+  tuber: 1.0,
+  vegetable: 1.0,
+  fruit: 1.8,
+  beverage: 2.0,
+  oil: 1.4,
+  fiber: 1.2,
+  spice: 1.1,
+  latex: 2.5,
+  forage: 1.6,
+};
+const MASTER_CROPS: Record<string, string[]> = {
+  cereal: ["Maize", "Rice (African)", "Rice (Asian)", "Sorghum", "Pearl Millet", "Finger Millet", "Teff", "Fonio", "Barley", "Wheat", "Oats"],
+  legume: ["Cowpea (Black-eyed pea)", "Soybean", "Groundnut (Peanut)", "Pigeon Pea", "Bambara Nut", "Kersting's Groundnut", "Chickpeas", "Lentils", "Green Gram (Mung bean)", "Common Bean"],
+  tuber: ["White Yam", "Yellow Yam", "Water Yam", "Cassava", "Irish Potato", "Sweet Potato", "Cocoyam (Taro)", "Cocoyam (Tannia)", "Livingstone Potato", "Hausa Potato"],
+  vegetable: ["Tomato", "Onion", "Habanero Pepper", "Cayenne Pepper", "Okra", "Eggplant (Garden Egg)", "African Spinach (Efo)", "Amaranth", "Jute Mallow (Ewedu)", "Pumpkin leaves (Ugu)", "Cabbage", "Carrot", "Lettuce", "Green Beans", "Cucumber"],
+  fruit: ["Mango", "Orange", "Pineapple", "Banana", "Plantain", "Pawpaw (Papaya)", "Watermelon", "Avocado", "Guava", "Cashew Apple", "African Star Apple (Agbalumo)", "Shea Fruit", "Baobab Fruit"],
+  beverage: ["Cocoa", "Coffee (Arabica)", "Coffee (Robusta)", "Tea", "Hibiscus (Zobo)", "Kola Nut"],
+  oil: ["Oil Palm", "Groundnut", "Coconut", "Soybean", "Sesame (Beniseed)", "Sunflower", "Cottonseed", "Shea Nut", "Melon Seed (Egusi)"],
+  fiber: ["Cotton", "Jute", "Sisal", "Kenaf", "Raffia", "Flax"],
+  spice: ["Ginger", "Alligator Pepper", "Chili Pepper", "Onion", "Garlic", "Turmeric", "Cloves", "Nutmeg", "Cinnamon", "Black Pepper (Iyere)"],
+  latex: ["Rubber Tree", "Gum Arabic"],
+  forage: ["Alfalfa", "Sorghum", "Napier Grass (Elephant Grass)", "Rhodes Grass", "Guinea Grass", "Lablab", "Stylosanthes", "Maize (Silage)"],
+};
+
+export const getReferenceCrops = async (category?: string) => {
+  if (category) {
+    return MASTER_CROPS[category.toLowerCase()] || [];
+  }
+  return MASTER_CROPS;
+};
+
+export const getAllPractices = async () => {
+  return await FarmPractice.find({ isActive: true });
+};
+
+export const addCropToFarm = async (
+  userId: string,
+  farmId: string,
+  data: { name: string; category: ICrop["category"] }
+) => {
+  const farm = await Farm.findOne({ _id: farmId, owner: userId });
+  if (!farm) {
+    throw new Error("Farm not found or you don't have permission");
+  }
+
+  const carbonMultiplier = CATEGORY_MULTIPLIERS[data.category as keyof typeof CATEGORY_MULTIPLIERS] || 1.0;
+
+  const crop = await Crop.create({
+    farmId,
+    owner: userId,
+    name: data.name,
+    category: data.category,
+    carbonMultiplier: carbonMultiplier,
+  });
+
+  logger.info(`Crop ${data.name} added to farm ${farmId} with multiplier ${carbonMultiplier}`);
+  return crop;
+};
+
+export const getFarmCrops = async (farmId: string, userId: string) => {
+  const farm = await Farm.findOne({ _id: farmId, owner: userId });
+  if (!farm) {
+    throw new Error("Farm not found or you don't have permission");
+  }
+  return await Crop.find({ farmId }).sort({ createdAt: -1 });
+};
 
 export const createCropSeason = async (
   userId: string,
@@ -56,6 +125,11 @@ export const logPracticeActivity = async (
   const practice = await FarmPractice.findById(data.practiceId);
   if (!practice) {
     throw new Error("Practice not found");
+  }
+
+  // Ensure soilType is valid for the farm
+  if (!farm.soilType.includes(data.soilType as any)) {
+    throw new Error(`Soil type ${data.soilType} is not registered for this farm. Choose from: ${farm.soilType.join(", ")}`);
   }
 
   // If cropSeasonId is provided, validate it
