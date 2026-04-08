@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getFarmRisk, getRiskHistory, getCurrentWeather } from "../Controllers/weather.controller";
+import { getFarmRisk, getRiskHistory, getCurrentWeather, triggerWeatherSync } from "../Controllers/weather.controller";
 import { authenticate } from "../Middlewares/auth.middleware";
 
 
@@ -22,6 +22,12 @@ router.get(
   "/history",
   authenticate as any,
   getRiskHistory as any
+);
+
+router.post(
+  "/sync",
+  authenticate as any,
+  triggerWeatherSync as any
 );
 
 export default router;

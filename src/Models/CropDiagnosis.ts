@@ -17,10 +17,40 @@ const cropDiagnosisSchema = new Schema<ICropDiagnosis>({
       {
         task: { type: String },
         timeframe: { type: String },
-        isCompleted: { type: Boolean, default: false }
+        isCompleted: { type: Boolean, default: false },
+        category: { type: String, enum: ["Cultural", "Biological", "Chemical"] },
+        estimatedCost: { type: String },
+        priority: { type: String, enum: ["critical", "high", "medium", "low"] }
       }
     ],
-    aiModel: { type: String, required: true }
+    aiModel: { type: String, required: true },
+    // New enhanced fields
+    imageQuality: { type: String, enum: ["good", "fair", "poor"] },
+    imageQualityIssues: [{ type: String }],
+    affectedArea: { type: String },
+    spreadRisk: { type: String, enum: ["low", "medium", "high"] },
+    spreadRiskReason: { type: String },
+    urgency: { type: String, enum: ["immediate", "within_24h", "within_week", "monitoring"] },
+    totalEstimatedCost: {
+      min: { type: Number },
+      max: { type: Number },
+      currency: { type: String, default: "NGN" },
+      notes: { type: String }
+    },
+    yieldImpact: {
+      withoutTreatment: { type: String },
+      withTreatment: { type: String },
+      economicBenefit: { type: String }
+    },
+    weatherConsiderations: {
+      optimalSprayConditions: { type: String },
+      rainWarning: { type: String },
+      temperatureRange: { type: String }
+    },
+    similarCases: { type: String },
+    localRemedies: [{ type: String }],
+    lowConfidenceWarning: { type: String },
+    criticalWarning: { type: String }
 },{
     timestamps: true
 })

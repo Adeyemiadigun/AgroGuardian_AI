@@ -19,6 +19,14 @@ import resilienceRoutes from './Routes/resilience.routes';
 import practiceRoutes from './Routes/practice.routes';
 import creditRoutes from './Routes/credit.routes';
 import notificationRoutes from './Routes/notification.routes';
+import consultationRoutes from './Routes/consultation.routes';
+import livestockRoutes from './Routes/livestock.routes';
+import livestockHealthRoutes from './Routes/livestock-health.routes';
+import livestockDiagnosisRoutes from './Routes/livestock-diagnosis.routes';
+import livestockFeedBreedingRoutes from './Routes/livestock-feed-breeding.routes';
+import livestockInventoryRoutes from './Routes/livestock-inventory.routes';
+import vetConsultationRoutes from './Routes/vet-consultation.routes';
+import livestockAlertsRoutes from './Routes/livestock-alerts.routes';
 
 // Workers & Queues
 import { initResilienceWorker } from './Workers/resilience.worker';
@@ -26,6 +34,8 @@ import { initEmailWorker } from './Workers/email.worker';
 import { initWeatherSyncWorker } from './Workers/weatherSync.worker';
 import { initDailyWeatherSync } from './Queues/weatherSync.queue';
 import { initDiagnosisWorker } from './Workers/diagnosis.worker';
+import { initLivestockDiagnosisWorker } from './Workers/livestockDiagnosis.worker';
+import { initLivestockHealthCheckWorker } from './Workers/livestockHealthCheck.worker';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -36,8 +46,13 @@ connectDB()
 initResilienceWorker();
 initEmailWorker();
 initWeatherSyncWorker();
-initDailyWeatherSync(); 
-initDiagnosisWorker(); 
+
+const weatherSyncInterval = (process.env.WEATHER_SYNC_INTERVAL || '6-hourly') as any;
+initDailyWeatherSync(weatherSyncInterval); 
+
+initDiagnosisWorker();
+initLivestockDiagnosisWorker();
+initLivestockHealthCheckWorker();
 
 app.use(cors({
     origin: [
@@ -55,6 +70,14 @@ app.use('/api/resilience', resilienceRoutes);
 app.use('/api/practices', practiceRoutes);
 app.use('/api/credits', creditRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/consultations', consultationRoutes);
+app.use('/api/livestock', livestockRoutes);
+app.use('/api/livestock-health', livestockHealthRoutes);
+app.use('/api/livestock-diagnosis', livestockDiagnosisRoutes);
+app.use('/api/livestock-management', livestockFeedBreedingRoutes);
+app.use('/api/livestock-inventory', livestockInventoryRoutes);
+app.use('/api/vet-consultations', vetConsultationRoutes);
+app.use('/api/livestock-alerts', livestockAlertsRoutes);
 
 app.get('/', (req: Request, res: Response) => {
     logger.info('AgroGuardian AI API is running...')

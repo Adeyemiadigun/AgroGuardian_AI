@@ -2,6 +2,7 @@ import Farm from "../Models/Farm";
 import CropDiagnosis from "../Models/CropDiagnosis";
 import ClimateRisk from "../Models/ClimateRisk";
 import Crop from "../Models/Crop";
+import Consultation from "../Models/Consultation";
 import ResilienceProfile from "../Models/ResilienceProfile";
 import logger from "../Utils/logger";
 
@@ -14,13 +15,32 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
     }
 
     const diagnoses = await CropDiagnosis.find({ farmId: farmId, userId: userId });
+    const consultations = await Consultation.find({ farmId: farmId, userId: userId });
     const climateRisks = await ClimateRisk.find({ farmId: farmId }).sort({ timestamp: -1 }).limit(10);
     const crops = await Crop.find({ farmId });
 
+    // Diagnosis management score
     const totalDiagnoses = diagnoses.length;
     const resolvedDiagnoses = diagnoses.filter((d) => d.status === "resolved").length;
-    const managementScore = totalDiagnoses === 0 ? 50 : Math.round((resolvedDiagnoses / totalDiagnoses) * 100);
+    const diagnosisScore = totalDiagnoses === 0 ? 50 : Math.round((resolvedDiagnoses / totalDiagnoses) * 100);
 
+    // Consultation management score
+    const totalConsultations = consultations.length;
+    const resolvedConsultations = consultations.filter((c) => c.status === "resolved").length;
+    const activeHighSeverity = consultations.filter(
+      (c) => c.status === "active" && (c.severity === "high" || c.severity === "critical")
+    ).length;
+    
+    // Consultation score: resolved consultations good, active high-severity bad
+    let consultationScore = 50;
+    if (totalConsultations > 0) {
+      const resolvedRatio = resolvedConsultations / totalConsultations;
+      const severityPenalty = activeHighSeverity * 15; // -15 points per active high/critical issue
+      consultationScore = Math.max(0, Math.round(resolvedRatio * 100) - severityPenalty);
+    }
+
+    // Combined management score (60% diagnosis, 40% consultation)
+    const managementScore = Math.round(diagnosisScore * 0.6 + consultationScore * 0.4);
 
     const highRiskEvents = climateRisks.filter(
       (r) => r.droughtRisk === "high" || r.floodRisk === "high" || r.heatRisk === "high"
@@ -40,8 +60,14 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
     );
 
     const recommendations: string[] = [];
-    if (managementScore < 70) {
+    if (diagnosisScore < 70) {
       recommendations.push("Improve your score by resolving active crop disease diagnoses promptly.");
+    }
+    if (activeHighSeverity > 0) {
+      recommendations.push(`You have ${activeHighSeverity} active high-severity consultation(s). Address these issues to improve your resilience score.`);
+    }
+    if (consultationScore < 50 && totalConsultations > 0) {
+      recommendations.push("Mark resolved consultations as 'Resolved' to reflect your proactive farm management.");
     }
     if (diversityScore < 60) {
       recommendations.push("Consider increasing crop diversity (e.g., intercropping or rotation) to reduce financial risk.");
@@ -76,7 +102,7 @@ export const updateResilienceProfile = async (farmId: string, userId: string) =>
       { upsert: true, new: true }
     );
 
-    logger.info(`Resilience Profile updated for farm ${farmId}. New Score: ${overallScore}`);
+    logger.info(`Resilience Profile updated for farm ${farmId}. New Score: ${overallScore} (Diagnosis: ${diagnosisScore}, Consultation: ${consultationScore})`);
     return profile;
   } catch (error: any) {
     logger.error(`Error updating resilience profile: ${error.message}`);

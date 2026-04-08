@@ -62,22 +62,24 @@ export const getFarmRisk = async (req: AuthRequest, res: Response): Promise<void
 export const getCurrentWeather = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId;
-    const { farmId: queryFarmId } = req.query;
+    const { farmId: queryFarmId, fresh } = req.query;
     const farm = await findUserFarm(userId, queryFarmId as string);
     const farmId = farm._id as mongoose.Types.ObjectId;
 
+    // If fresh=true or no weather data exists, fetch from API
     const latestWeather = await WeatherData.findOne({ farmId: farmId })
       .sort({ timestamp: -1 });
 
-    if (!latestWeather) {
+    if (!latestWeather || fresh === 'true') {
+      // Fetch fresh data from API
       await getClimateRisk(farmId.toString());
       const freshWeather = await WeatherData.findOne({ farmId: farmId })
         .sort({ timestamp: -1 });
 
-      logger.info("Current weather retrieved (freshly updated)", { farmId, userId });
+      logger.info("Current weather retrieved (freshly fetched from API)", { farmId, userId });
       res.status(200).json({
         success: true,
-        message: "Current weather retrieved (freshly updated)",
+        message: "Current weather retrieved (freshly fetched from API)",
         data: {
           ...freshWeather?.toObject(),
           location: farm.location
@@ -130,4 +132,43 @@ export const getRiskHistory = async (req: AuthRequest, res: Response): Promise<v
             message: error.message || "Failed to fetch risk history"
         });
     }
+};
+
+
+// Manual trigger endpoint for weather sync
+export const triggerWeatherSync = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const { farmId: queryFarmId } = req.query;
+    
+    // If farmId provided, verify user owns it
+    let farmId: string | undefined;
+    if (queryFarmId) {
+      const farm = await findUserFarm(userId, queryFarmId as string);
+      farmId = (farm._id as mongoose.Types.ObjectId).toString();
+    }
+
+    // Trigger the sync job
+    const { triggerWeatherSyncNow } = await import("../Queues/weatherSync.queue");
+    const result = await triggerWeatherSyncNow(farmId);
+
+    logger.info("Manual weather sync triggered", { farmId, userId, jobId: result.jobId });
+    res.status(200).json({
+      success: true,
+      message: farmId 
+        ? "Weather sync triggered for your farm. Updates will be available shortly." 
+        : "Weather sync triggered for all your farms. Updates will be available shortly.",
+      data: {
+        jobId: result.jobId,
+        status: result.status,
+        farmId,
+      }
+    });
+  } catch (error: any) {
+    logger.error("Error triggering weather sync", error);
+    res.status(error.message.includes("not found") ? 404 : 500).json({
+      success: false,
+      message: error.message || "Failed to trigger weather sync"
+    });
+  }
 };

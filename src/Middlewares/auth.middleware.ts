@@ -1,5 +1,5 @@
 import { Response, NextFunction } from "express";
-import { verifyAccessToken } from "../Utils/generateToken";
+import { verifyAccessToken as verifyJwtAccessToken } from "../Utils/generateToken";
 import { AuthRequest } from "../Types/auth.types";
 import logger from "../Utils/logger";
 
@@ -14,8 +14,9 @@ export const authenticate = (  req: AuthRequest,  res: Response,  next: NextFunc
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = verifyAccessToken(token);
+    const decoded = verifyJwtAccessToken(token);
     req.user = decoded;
+    (req as any).userId = decoded.userId;
     next();
   } catch (error) {
     logger.warn("Invalid access token attempt");
@@ -23,6 +24,9 @@ export const authenticate = (  req: AuthRequest,  res: Response,  next: NextFunc
     return;
   }
 };
+
+// Backwards-compatible alias used by some route modules
+export const verifyAccessToken = authenticate;
 
 export const authorize = (...roles: string[]) => {
   return (req: AuthRequest, res: Response, next: NextFunction): void => {

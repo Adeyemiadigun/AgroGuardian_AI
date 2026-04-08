@@ -40,6 +40,27 @@ export interface IClimateRisk extends Document {
   pestRisk: 'low' | 'medium' | 'high';
   diseaseRisk: 'low' | 'medium' | 'high';
   notes?: string;
+  // Enhanced risk details (optional)
+  droughtRiskDetails?: {
+    score: number;
+    factors: string[];
+  };
+  floodRiskDetails?: {
+    score: number;
+    factors: string[];
+  };
+  heatRiskDetails?: {
+    score: number;
+    factors: string[];
+  };
+  pestRiskDetails?: {
+    score: number;
+    factors: string[];
+  };
+  diseaseRiskDetails?: {
+    score: number;
+    factors: string[];
+  };
 }
 
 export interface IWeatherAlert  extends Document {
