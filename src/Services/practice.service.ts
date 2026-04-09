@@ -38,6 +38,167 @@ const MASTER_CROPS: Record<string, string[]> = {
   forage: ["Alfalfa", "Sorghum", "Napier Grass (Elephant Grass)", "Rhodes Grass", "Guinea Grass", "Lablab", "Stylosanthes", "Maize (Silage)"],
 };
 
+const DEFAULT_NIGERIA_PRACTICES: Array<{
+  name: string;
+  description: string;
+  category: "soil" | "crop" | "water" | "agroforestry";
+}> = [
+  {
+    name: "Mulching",
+    description: "Cover soil with crop residues/grass to conserve moisture, reduce weeds, and protect against heat.",
+    category: "soil",
+  },
+  {
+    name: "Composting",
+    description: "Convert farm waste to compost to improve soil structure and long-term fertility.",
+    category: "soil",
+  },
+  {
+    name: "Use of Organic Manure",
+    description: "Apply poultry/cattle manure safely to improve soil nutrients and microbial activity.",
+    category: "soil",
+  },
+  {
+    name: "Cover Cropping",
+    description: "Plant cover crops/legumes to protect soil, reduce erosion, and add nitrogen.",
+    category: "soil",
+  },
+  {
+    name: "Minimum Tillage (Conservation Agriculture)",
+    description: "Reduce soil disturbance to retain moisture and reduce erosion, especially in dry seasons.",
+    category: "soil",
+  },
+  {
+    name: "Soil Testing & Balanced Fertilization",
+    description: "Use soil tests to guide fertilizer/liming decisions and avoid nutrient waste.",
+    category: "soil",
+  },
+  {
+    name: "Green Manuring",
+    description: "Incorporate green biomass/legumes to add organic matter and improve soil fertility.",
+    category: "soil",
+  },
+  {
+    name: "Lime Application (Acidic Soils)",
+    description: "Apply agricultural lime where needed to correct soil acidity and improve nutrient availability.",
+    category: "soil",
+  },
+
+  {
+    name: "Crop Rotation",
+    description: "Rotate cereals/legumes/tubers across seasons to reduce pests/diseases and improve soil health.",
+    category: "crop",
+  },
+  {
+    name: "Intercropping (Mixed Cropping)",
+    description: "Grow complementary crops together (e.g., maize + cowpea) to diversify income and reduce risk.",
+    category: "crop",
+  },
+  {
+    name: "Use of Improved/Certified Seeds",
+    description: "Use certified seeds/seedlings for better yield, uniformity, and resilience to common diseases.",
+    category: "crop",
+  },
+  {
+    name: "Integrated Pest Management (IPM)",
+    description: "Combine scouting, cultural control, and safe pesticides only when needed to reduce losses.",
+    category: "crop",
+  },
+  {
+    name: "Timely Planting",
+    description: "Plant early with the onset of rains (or irrigate) to maximize growing period and reduce drought impact.",
+    category: "crop",
+  },
+  {
+    name: "Weed Management (Timely Weeding)",
+    description: "Control weeds early and consistently to reduce competition for water and nutrients.",
+    category: "crop",
+  },
+  {
+    name: "Field Sanitation",
+    description: "Remove diseased plants/residues and keep field clean to reduce pest and disease carry-over.",
+    category: "crop",
+  },
+
+  {
+    name: "Raised Beds & Drainage Channels",
+    description: "Use ridges/beds and drainage to reduce waterlogging during heavy rains.",
+    category: "water",
+  },
+  {
+    name: "Rainwater Harvesting",
+    description: "Collect/store rainwater (tanks/ponds) for dry spells and off-season production.",
+    category: "water",
+  },
+  {
+    name: "Drip Irrigation",
+    description: "Efficient irrigation that reduces water use and improves yields in dry areas.",
+    category: "water",
+  },
+  {
+    name: "Sprinkler Irrigation",
+    description: "Supplement rainfall to stabilize yields; best with proper scheduling to reduce disease pressure.",
+    category: "water",
+  },
+  {
+    name: "Irrigation Scheduling",
+    description: "Plan irrigation by crop stage and weather to reduce waste and avoid water stress.",
+    category: "water",
+  },
+
+  {
+    name: "Agroforestry (Trees on Farms)",
+    description: "Integrate trees for shade, soil improvement, and additional income (e.g., cashew, mango, moringa).",
+    category: "agroforestry",
+  },
+  {
+    name: "Windbreaks / Shelterbelts",
+    description: "Plant trees/hedges as windbreaks to reduce crop lodging and evapotranspiration.",
+    category: "agroforestry",
+  },
+  {
+    name: "Alley Cropping",
+    description: "Grow crops between rows of trees/shrubs to reduce erosion and improve soil fertility over time.",
+    category: "agroforestry",
+  },
+];
+
+let nigeriaPracticesSeeded = false;
+const ensureNigeriaPracticesSeeded = async () => {
+  if (nigeriaPracticesSeeded) return;
+  nigeriaPracticesSeeded = true;
+
+  try {
+    const now = new Date();
+    await Promise.all(
+      DEFAULT_NIGERIA_PRACTICES.map((p) =>
+        FarmPractice.updateOne(
+          { name: p.name },
+          {
+            // $set applies to both existing docs and newly upserted docs
+            $set: {
+              description: p.description,
+              category: p.category,
+              isActive: true,
+              updatedAt: now,
+            },
+            // Only set fields that must exist only on insert
+            $setOnInsert: {
+              name: p.name,
+              createdAt: now,
+            },
+          },
+          { upsert: true }
+        )
+      )
+    );
+  } catch (error) {
+    // Allow retry on next request
+    nigeriaPracticesSeeded = false;
+    logger.error("Failed to seed default Nigeria farm practices", error);
+  }
+};
+
 export const getReferenceCrops = async (category?: string) => {
   if (category) {
     return MASTER_CROPS[category.toLowerCase()] || [];
@@ -46,7 +207,8 @@ export const getReferenceCrops = async (category?: string) => {
 };
 
 export const getAllPractices = async () => {
-  return await FarmPractice.find({ isActive: true });
+  await ensureNigeriaPracticesSeeded();
+  return await FarmPractice.find({ isActive: true }).sort({ category: 1, name: 1 });
 };
 
 export const addCropToFarm = async (

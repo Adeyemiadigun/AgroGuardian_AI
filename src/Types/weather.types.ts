@@ -29,6 +29,10 @@ export interface IWeatherData  extends Document {
     weatherDescription: string;
     icon?: string;
   }>;
+
+  // Raw OpenWeather payloads (stored to enable full weather reporting in the UI)
+  currentRaw?: any;
+  forecastRaw?: any[];
 }
 
 export interface IClimateRisk extends Document {

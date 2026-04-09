@@ -58,13 +58,52 @@ const callWithFallback = async (
   try {
     return await createCall(primaryModel);
   } catch (error: any) {
-    // If rate limited or model unavailable, try fallback
-    if (error?.status === 429 || error?.status === 503 || error?.code === 'model_not_found') {
-      logger.warn(`Primary model ${primaryModel} failed, trying fallback ${FALLBACK_MODEL}`);
-      return await createCall(FALLBACK_MODEL);
+    const shouldTryFallback =
+      error?.status === 429 ||
+      error?.status === 503 ||
+      error?.status === 404 ||
+      error?.code === 'model_not_found';
+
+    if (!shouldTryFallback || FALLBACK_MODELS.length === 0) {
+      throw error;
     }
-    throw error;
+
+    let lastErr: any = error;
+    for (const fallbackModel of FALLBACK_MODELS) {
+      if (!fallbackModel || fallbackModel === primaryModel) continue;
+      try {
+        logger.warn(`Primary model failed; trying fallback ${fallbackModel}`);
+        return await createCall(fallbackModel);
+      } catch (fallbackError: any) {
+        lastErr = fallbackError;
+        logger.warn(`Fallback model failed; trying next (if any)`);
+      }
+    }
+
+    throw lastErr;
   }
+};
+
+// OpenRouter / OpenAI-compatible models may optionally return `reasoning_details`.
+// We keep this behind an env flag to avoid extra tokens/cost unless you want it.
+const withReasoning = (params: any): any => {
+  const enabled = String(
+    process.env.AI_INCLUDE_REASONING ||
+      process.env.AI_WITH_REASONING ||
+      process.env.AI_REASONING ||
+      ''
+  ).toLowerCase() === 'true';
+
+  if (!enabled) return params;
+
+  const effort = (process.env.AI_REASONING_EFFORT || 'low').toLowerCase();
+
+  return {
+    ...params,
+    // Different providers use different flags; sending both is harmless for OpenRouter.
+    include_reasoning: true,
+    reasoning: params?.reasoning ?? { effort },
+  };
 };
 
 const COMPARISON_PROMPT = `You are a strict agricultural auditor. You are comparing two photos of the same farm location: one taken at the START of a regenerative practice and one taken at the END.
@@ -287,55 +326,6 @@ export const analyzeCropImage = async (
   }
 };
 
-const VERIFICATION_PROMPT = `You are an expert agricultural auditor for AgroGuardian AI.
-Analyze the provided farm image and determine if it shows evidence of a specific regenerative practice.
-
-Return ONLY a JSON response (no markdown, no extra text):
-{
-  "isVerified": true | false,
-  "confidence": 0-100,
-  "observations": "Brief description of what you see",
-  "reasoning": "Why you reached this conclusion"
-}
-
-Practice to verify: `;
-
-export const verifyPracticeImage = async (
-  imageBase64: string,
-  practiceName: string
-): Promise<any> => {
-  const prompt = `${VERIFICATION_PROMPT} "${practiceName}". Does the image show evidence of this practice? Return ONLY valid JSON.`;
-  
-  const result = await callWithFallback(
-    (model) => api.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: 'You are an agricultural verification assistant. Always respond with valid JSON only.' },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
-              },
-            },
-          ],
-        },
-      ],
-    } as any),
-    VISION_MODEL
-  );
-  
-  const message = result.choices[0].message.content;
-  try {
-    return extractJSON(message || '{}');
-  } catch {
-    logger.error('Failed to parse AI verification response:', message);
-    throw new Error('Failed to parse AI verification response');
-  }
-};
 
 export const chatWithDiagnosis = async (
   userMessage: string,

@@ -2,13 +2,29 @@ import { Request, Response, NextFunction } from 'express';
 import { livestockHealthService } from '../Services/livestock-health.service';
 import { Types } from 'mongoose';
 
+const getSingleString = (value: unknown): string | undefined => {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : undefined;
+  return typeof value === 'string' ? value : undefined;
+};
+
+const badRequest = (res: Response, message: string) =>
+  res.status(400).json({ success: false, message });
+
+const getDaysQuery = (req: Request, fallback = 30) => {
+  const raw = getSingleString((req.query as any)?.days);
+  const n = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
+
 export class LivestockHealthController {
   // ==================== VACCINATIONS ====================
 
   async addVaccination(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
       const userId = (req as any).userId;
+
+      if (!livestockId) return badRequest(res, 'livestockId is required');
 
       const vaccination = await livestockHealthService.addVaccination({
         ...req.body,
@@ -28,7 +44,8 @@ export class LivestockHealthController {
 
   async getVaccinations(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
+      if (!livestockId) return badRequest(res, 'livestockId is required');
       const vaccinations = await livestockHealthService.getVaccinations(livestockId);
 
       res.json({
@@ -42,9 +59,10 @@ export class LivestockHealthController {
 
   async getUpcomingVaccinations(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 30;
+      const farmId = getSingleString((req.params as any).farmId);
+      const days = getDaysQuery(req, 30);
       
+      if (!farmId) return badRequest(res, 'farmId is required');
       const vaccinations = await livestockHealthService.getUpcomingVaccinations(farmId, days);
 
       res.json({
@@ -58,7 +76,8 @@ export class LivestockHealthController {
 
   async updateVaccination(req: Request, res: Response, next: NextFunction) {
     try {
-      const { vaccinationId } = req.params;
+      const vaccinationId = getSingleString((req.params as any).vaccinationId);
+      if (!vaccinationId) return badRequest(res, 'vaccinationId is required');
       const vaccination = await livestockHealthService.updateVaccination(vaccinationId, req.body);
 
       if (!vaccination) {
@@ -80,7 +99,8 @@ export class LivestockHealthController {
 
   async deleteVaccination(req: Request, res: Response, next: NextFunction) {
     try {
-      const { vaccinationId } = req.params;
+      const vaccinationId = getSingleString((req.params as any).vaccinationId);
+      if (!vaccinationId) return badRequest(res, 'vaccinationId is required');
       const deleted = await livestockHealthService.deleteVaccination(vaccinationId);
 
       if (!deleted) {
@@ -103,8 +123,10 @@ export class LivestockHealthController {
 
   async addTreatment(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
       const userId = (req as any).userId;
+
+      if (!livestockId) return badRequest(res, 'livestockId is required');
 
       const treatment = await livestockHealthService.addTreatment({
         ...req.body,
@@ -124,7 +146,8 @@ export class LivestockHealthController {
 
   async getTreatments(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
+      if (!livestockId) return badRequest(res, 'livestockId is required');
       const treatments = await livestockHealthService.getTreatments(livestockId);
 
       res.json({
@@ -138,7 +161,8 @@ export class LivestockHealthController {
 
   async getActiveTreatments(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = getSingleString((req.params as any).farmId);
+      if (!farmId) return badRequest(res, 'farmId is required');
       const treatments = await livestockHealthService.getActiveTreatments(farmId);
 
       res.json({
@@ -152,7 +176,8 @@ export class LivestockHealthController {
 
   async updateTreatment(req: Request, res: Response, next: NextFunction) {
     try {
-      const { treatmentId } = req.params;
+      const treatmentId = getSingleString((req.params as any).treatmentId);
+      if (!treatmentId) return badRequest(res, 'treatmentId is required');
       const treatment = await livestockHealthService.updateTreatment(treatmentId, req.body);
 
       if (!treatment) {
@@ -174,7 +199,8 @@ export class LivestockHealthController {
 
   async deleteTreatment(req: Request, res: Response, next: NextFunction) {
     try {
-      const { treatmentId } = req.params;
+      const treatmentId = getSingleString((req.params as any).treatmentId);
+      if (!treatmentId) return badRequest(res, 'treatmentId is required');
       const deleted = await livestockHealthService.deleteTreatment(treatmentId);
 
       if (!deleted) {
@@ -197,9 +223,11 @@ export class LivestockHealthController {
 
   async reportIllness(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
       const userId = (req as any).userId;
       const files = (req as any).files as Express.Multer.File[] | undefined;
+
+      if (!livestockId) return badRequest(res, 'livestockId is required');
 
       // Parse symptoms if it comes as a JSON string or array
       let symptoms = req.body.symptoms;
@@ -244,7 +272,8 @@ export class LivestockHealthController {
 
   async getIllnesses(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
+      if (!livestockId) return badRequest(res, 'livestockId is required');
       const illnesses = await livestockHealthService.getIllnesses(livestockId);
 
       res.json({
@@ -258,7 +287,8 @@ export class LivestockHealthController {
 
   async getActiveIllnesses(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = getSingleString((req.params as any).farmId);
+      if (!farmId) return badRequest(res, 'farmId is required');
       const illnesses = await livestockHealthService.getActiveIllnesses(farmId);
 
       res.json({
@@ -272,7 +302,8 @@ export class LivestockHealthController {
 
   async updateIllness(req: Request, res: Response, next: NextFunction) {
     try {
-      const { illnessId } = req.params;
+      const illnessId = getSingleString((req.params as any).illnessId);
+      if (!illnessId) return badRequest(res, 'illnessId is required');
       const illness = await livestockHealthService.updateIllness(illnessId, req.body);
 
       if (!illness) {
@@ -296,8 +327,10 @@ export class LivestockHealthController {
 
   async addCheckup(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
       const userId = (req as any).userId;
+
+      if (!livestockId) return badRequest(res, 'livestockId is required');
 
       const checkup = await livestockHealthService.addCheckup({
         ...req.body,
@@ -317,7 +350,8 @@ export class LivestockHealthController {
 
   async getCheckups(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
+      if (!livestockId) return badRequest(res, 'livestockId is required');
       const checkups = await livestockHealthService.getCheckups(livestockId);
 
       res.json({
@@ -331,9 +365,10 @@ export class LivestockHealthController {
 
   async getRecentCheckups(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 30;
+      const farmId = getSingleString((req.params as any).farmId);
+      const days = getDaysQuery(req, 30);
       
+      if (!farmId) return badRequest(res, 'farmId is required');
       const checkups = await livestockHealthService.getRecentCheckups(farmId, days);
 
       res.json({
@@ -349,8 +384,10 @@ export class LivestockHealthController {
 
   async addDeworming(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
       const userId = (req as any).userId;
+
+      if (!livestockId) return badRequest(res, 'livestockId is required');
 
       const deworming = await livestockHealthService.addDeworming({
         ...req.body,
@@ -370,7 +407,8 @@ export class LivestockHealthController {
 
   async getDewormings(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
+      if (!livestockId) return badRequest(res, 'livestockId is required');
       const dewormings = await livestockHealthService.getDewormings(livestockId);
 
       res.json({
@@ -384,9 +422,10 @@ export class LivestockHealthController {
 
   async getUpcomingDewormings(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 30;
+      const farmId = getSingleString((req.params as any).farmId);
+      const days = getDaysQuery(req, 30);
       
+      if (!farmId) return badRequest(res, 'farmId is required');
       const dewormings = await livestockHealthService.getUpcomingDewormings(farmId, days);
 
       res.json({
@@ -402,7 +441,8 @@ export class LivestockHealthController {
 
   async getHealthSummary(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = getSingleString((req.params as any).farmId);
+      if (!farmId) return badRequest(res, 'farmId is required');
       const summary = await livestockHealthService.getHealthSummary(farmId);
 
       res.json({
@@ -416,7 +456,8 @@ export class LivestockHealthController {
 
   async getAllHealthRecords(req: Request, res: Response, next: NextFunction) {
     try {
-      const { livestockId } = req.params;
+      const livestockId = getSingleString((req.params as any).livestockId);
+      if (!livestockId) return badRequest(res, 'livestockId is required');
       const records = await livestockHealthService.getAllHealthRecords(livestockId);
 
       res.json({

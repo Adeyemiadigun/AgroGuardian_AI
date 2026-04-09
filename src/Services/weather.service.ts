@@ -686,6 +686,10 @@ export const getClimateRisk = async (farmId: string) => {
           weatherDescription: f.weather[0].description,
           icon: f.weather[0].icon,
         })),
+
+        // Store raw OpenWeather payloads for full UI reporting
+        currentRaw,
+        forecastRaw,
       });
 
       // Pass farm's soil type and irrigation system for enhanced flood risk calculation

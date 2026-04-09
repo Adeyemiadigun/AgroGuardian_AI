@@ -67,21 +67,29 @@ export const getCurrentWeather = async (req: AuthRequest, res: Response): Promis
     const farmId = farm._id as mongoose.Types.ObjectId;
 
     // If fresh=true or no weather data exists, fetch from API
-    const latestWeather = await WeatherData.findOne({ farmId: farmId })
+    let latestWeather = await WeatherData.findOne({ farmId: farmId })
       .sort({ timestamp: -1 });
 
-    if (!latestWeather || fresh === 'true') {
-      // Fetch fresh data from API
+    const needsRawPayloads =
+      !latestWeather ||
+      !(latestWeather as any).currentRaw ||
+      !Array.isArray((latestWeather as any).forecastRaw) ||
+      (latestWeather as any).forecastRaw.length === 0;
+
+    if (!latestWeather || fresh === 'true' || needsRawPayloads) {
+      // Fetch fresh data from API (also used to backfill raw payloads for older snapshots)
       await getClimateRisk(farmId.toString());
-      const freshWeather = await WeatherData.findOne({ farmId: farmId })
+      latestWeather = await WeatherData.findOne({ farmId: farmId })
         .sort({ timestamp: -1 });
 
-      logger.info("Current weather retrieved (freshly fetched from API)", { farmId, userId });
+      logger.info("Current weather retrieved (freshly fetched from API)", { farmId, userId, needsRawPayloads, fresh });
       res.status(200).json({
         success: true,
-        message: "Current weather retrieved (freshly fetched from API)",
+        message: needsRawPayloads
+          ? "Current weather retrieved (refreshed to include full report)"
+          : "Current weather retrieved (freshly fetched from API)",
         data: {
-          ...freshWeather?.toObject(),
+          ...latestWeather?.toObject(),
           location: farm.location
         }
       });

@@ -31,6 +31,10 @@ const WeatherDataSchema = new Schema<IWeatherData>({
       icon: String,
     },
   ],
+
+  // Raw OpenWeather payloads (for full report rendering)
+  currentRaw: { type: Schema.Types.Mixed },
+  forecastRaw: [{ type: Schema.Types.Mixed }],
 });
 
 export default mongoose.model<IWeatherData>("WeatherData", WeatherDataSchema); 
