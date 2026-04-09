@@ -1,5 +1,6 @@
 import { Document } from "mongoose";
 import { Request } from "express";
+import { File as MulterFile } from "multer";
 
 export interface IUser extends Document {
   firstName: string;
@@ -34,4 +35,6 @@ export interface AuthPayload {
 
 export interface AuthRequest extends Request {
   user?: AuthPayload;
+  file?: MulterFile;
+  files?: MulterFile[] | { [fieldname: string]: MulterFile[] };
 }

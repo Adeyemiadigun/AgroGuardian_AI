@@ -48,8 +48,20 @@ const PracticeActivityLogsSchema = new Schema<IPracticeActivityLogs>({
   },
   status: {
     type: String,
-    enum: ["active", "completed", "paused"],
-    default: "active",
+    enum: ["active", "pending_start", "pending_end", "completed", "failed"],
+    default: "pending_start",
+  },
+  startEvidenceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Evidence",
+  },
+  endEvidenceId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Evidence",
+  },
+  verificationFlags: {
+    type: [String],
+    default: [],
   },
   createdAt: {
     type: Date,

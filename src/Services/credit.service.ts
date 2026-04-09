@@ -2,6 +2,7 @@ import CarbonCredits from "../Models/CarbonCredits";
 import CarbonCalculation from "../Models/CarbonCalculations";
 import Farm from "../Models/Farm";
 import logger from "../Utils/logger";
+import mongoose from "mongoose";
 
 export const generateCreditsForFarm = async (
   farmId: string,
@@ -77,4 +78,65 @@ export const getAllUserCredits = async (userId: string) => {
     return await CarbonCredits.find({ farmId: { $in: farmIds } })
         .populate("farmId", "name location")
         .sort({ issuedDate: -1 });
+};
+
+/**
+ * Get monthly aggregated carbon credit summary for a specific farmer
+ */
+export const getFarmerMonthlySummary = async (userId: string, status?: string) => {
+  const farms = await Farm.find({ owner: userId }, "_id");
+  const farmIds = farms.map(f => f._id);
+
+  const match: any = { farmId: { $in: farmIds } };
+  if (status) {
+    match.status = status;
+  }
+
+  return await CarbonCredits.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          month: { $month: "$issuedDate" },
+          year: { $year: "$issuedDate" }
+        },
+        totalCredits: { $sum: "$creditsEarned" },
+        count: { $sum: 1 },
+        statusBreakdown: {
+          $push: "$status"
+        }
+      }
+    },
+    { $sort: { "_id.year": -1, "_id.month": -1 } }
+  ]);
+};
+
+/**
+ * Get monthly aggregated carbon credit summary for a specific farm
+ */
+export const getFarmMonthlySummary = async (farmId: string, userId: string, status?: string) => {
+  const farm = await Farm.findOne({ _id: farmId, owner: userId });
+  if (!farm) {
+    throw new Error("Farm not found or you don't have permission");
+  }
+
+  const match: any = { farmId: new mongoose.Types.ObjectId(farmId) };
+  if (status) {
+    match.status = status;
+  }
+
+  return await CarbonCredits.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: {
+          month: { $month: "$issuedDate" },
+          year: { $year: "$issuedDate" }
+        },
+        totalCredits: { $sum: "$creditsEarned" },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { "_id.year": -1, "_id.month": -1 } }
+  ]);
 };

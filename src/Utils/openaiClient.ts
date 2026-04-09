@@ -4,10 +4,6 @@ import logger from './logger';
 // =============================================================================
 // OpenRouter Configuration
 // =============================================================================
-// Using OpenRouter for access to multiple AI models with a single API
-// Sign up at https://openrouter.ai to get your API key
-// =============================================================================
-
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 
 const api = new OpenAI({
@@ -19,30 +15,13 @@ const api = new OpenAI({
   },
 });
 
-// =============================================================================
-// Model Configuration
-// =============================================================================
-// Using Google Gemma 4 26B (FREE on OpenRouter)
-// =============================================================================
-
-// Primary model for vision/diagnosis tasks
 const VISION_MODEL = process.env.AI_VISION_MODEL || 'google/gemma-4-26b-a4b-it:free';
-
-// Model for text-only chat
 const CHAT_MODEL = process.env.AI_CHAT_MODEL || 'google/gemma-4-26b-a4b-it:free';
-
-// Fallback model if primary fails
 const FALLBACK_MODEL = 'openai/gpt-4o-mini';
 
-export const getModelName = (): string => {
-  return VISION_MODEL;
-};
+export const getModelName = (): string => VISION_MODEL;
+export const getChatModelName = (): string => CHAT_MODEL;
 
-export const getChatModelName = (): string => {
-  return CHAT_MODEL;
-};
-
-// Helper to call API with automatic fallback
 const callWithFallback = async (
   createCall: (model: string) => Promise<any>,
   primaryModel: string
@@ -50,13 +29,106 @@ const callWithFallback = async (
   try {
     return await createCall(primaryModel);
   } catch (error: any) {
-    // If rate limited or model unavailable, try fallback
     if (error?.status === 429 || error?.status === 503 || error?.code === 'model_not_found') {
       logger.warn(`Primary model ${primaryModel} failed, trying fallback ${FALLBACK_MODEL}`);
       return await createCall(FALLBACK_MODEL);
     }
     throw error;
   }
+};
+
+const COMPARISON_PROMPT = `You are a strict agricultural auditor. You are comparing two photos of the same farm location: one taken at the START of a regenerative practice and one taken at the END.
+
+Practice being verified: {practiceName}
+
+Tasks:
+1. LANDMARK CHECK: Compare background elements (trees, buildings, hills, fence lines). Are these definitely photos of the same physical spot?
+2. PROGRESS CHECK: Does the second photo show clear evidence that the practice has been implemented compared to the first? (e.g., if 'Mulching', is there now mulch cover?)
+3. AUTHENTICITY: Does either photo look like a stock image or manipulated?
+
+Return ONLY a JSON response:
+{
+  "isVerified": true | false,
+  "confidence": 0-100,
+  "landmarkMatch": true | false,
+  "observations": "Detailed description of changes observed",
+  "reasoning": "Why you reached this conclusion"
+}
+
+IMPORTANT: Be very strict. If it's not clearly the same location or if the practice evidence is weak, mark isVerified as false.`;
+
+const extractJSON = (text: string): any => {
+  try { return JSON.parse(text); } catch {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (objectMatch) return JSON.parse(objectMatch[0]);
+    throw new Error('No valid JSON found in response');
+  }
+};
+
+export const verifyPracticeImage = async (
+  imageBase64: string,
+  practiceName: string
+): Promise<any> => {
+  const prompt = `You are an expert agricultural auditor. Analyze this photo taken at the START of the practice: "${practiceName}". Does it show a valid starting point for this activity?
+  
+  Return ONLY JSON:
+  {
+    "isVerified": true | false,
+    "confidence": 0-100,
+    "observations": "What you see",
+    "reasoning": "Conclusion"
+  }`;
+  
+  const result = await callWithFallback(
+    (model) => api.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'You are an agricultural verification assistant. Always respond with valid JSON only.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+          ],
+        },
+      ],
+    } as any),
+    VISION_MODEL
+  );
+  
+  return extractJSON(result.choices[0].message.content || '{}');
+};
+
+export const comparePracticeImages = async (
+  startImageUrl: string,
+  endImageUrl: string,
+  practiceName: string
+): Promise<any> => {
+  const prompt = COMPARISON_PROMPT.replace('{practiceName}', practiceName);
+
+  const result = await callWithFallback(
+    (model) => api.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'You are a strict agricultural auditor. Always respond with valid JSON only.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'text', text: "START PHOTO:" },
+            { type: 'image_url', image_url: { url: startImageUrl } },
+            { type: 'text', text: "END PHOTO:" },
+            { type: 'image_url', image_url: { url: endImageUrl } },
+          ],
+        },
+      ],
+    } as any),
+    VISION_MODEL
+  );
+
+  return extractJSON(result.choices[0].message.content || '{}');
 };
 
 const DIAGNOSIS_PROMPT = `You are an expert agricultural plant pathologist and entomologist AI for AgroGuardian AI, specializing in crop disease detection and pest management for African and tropical crops.
@@ -120,26 +192,6 @@ Rules:
 
 IMPORTANT: Return ONLY valid JSON. No markdown code blocks, no backticks, no extra text before or after the JSON.`;
 
-// Helper to extract JSON from response (handles markdown code blocks)
-const extractJSON = (text: string): any => {
-  // Try direct parse first
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Try to extract from markdown code block
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[1].trim());
-    }
-    // Try to find JSON object in text
-    const objectMatch = text.match(/\{[\s\S]*\}/);
-    if (objectMatch) {
-      return JSON.parse(objectMatch[0]);
-    }
-    throw new Error('No valid JSON found in response');
-  }
-};
-
 export const analyzeCropImage = async (
   imageUrls: string[],
   cropType: string,
@@ -201,56 +253,6 @@ export const analyzeCropImage = async (
   } catch (e) {
     logger.error('Failed to parse AI response:', message);
     throw new Error('Failed to parse AI diagnosis response');
-  }
-};
-
-const VERIFICATION_PROMPT = `You are an expert agricultural auditor for AgroGuardian AI.
-Analyze the provided farm image and determine if it shows evidence of a specific regenerative practice.
-
-Return ONLY a JSON response (no markdown, no extra text):
-{
-  "isVerified": true | false,
-  "confidence": 0-100,
-  "observations": "Brief description of what you see",
-  "reasoning": "Why you reached this conclusion"
-}
-
-Practice to verify: `;
-
-export const verifyPracticeImage = async (
-  imageBase64: string,
-  practiceName: string
-): Promise<any> => {
-  const prompt = `${VERIFICATION_PROMPT} "${practiceName}". Does the image show evidence of this practice? Return ONLY valid JSON.`;
-  
-  const result = await callWithFallback(
-    (model) => api.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: 'You are an agricultural verification assistant. Always respond with valid JSON only.' },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/jpeg;base64,${imageBase64}`,
-              },
-            },
-          ],
-        },
-      ],
-    } as any),
-    VISION_MODEL
-  );
-  
-  const message = result.choices[0].message.content;
-  try {
-    return extractJSON(message || '{}');
-  } catch {
-    logger.error('Failed to parse AI verification response:', message);
-    throw new Error('Failed to parse AI verification response');
   }
 };
 

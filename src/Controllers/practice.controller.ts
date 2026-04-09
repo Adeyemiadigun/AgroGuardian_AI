@@ -3,6 +3,7 @@ import { AuthRequest } from "../Types/auth.types";
 import {
   createCropSeason,
   logPracticeActivity,
+  completePracticeActivity,
   getFarmActivities,
   getFarmCropSeasons,
   addCropToFarm,
@@ -124,10 +125,10 @@ export const logActivityController = async (req: AuthRequest, res: Response): Pr
       req.file?.buffer
     );
 
-    logger.info("Practice activity logged", { farmId: req.body.farmId, userId });
+    logger.info("Practice activity logged (Start)", { farmId: req.body.farmId, userId });
     res.status(201).json({
       success: true,
-      message: "Practice activity logged successfully",
+      message: "Practice activity initiated successfully. Upload completion evidence later.",
       data: activity,
     });
   } catch (error: any) {
@@ -135,6 +136,42 @@ export const logActivityController = async (req: AuthRequest, res: Response): Pr
     res.status(400).json({
       success: false,
       message: error.message || "Failed to log activity",
+    });
+  }
+};
+
+export const completeActivityController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId as string;
+    const { activityId } = req.params;
+    const { notes } = req.body;
+
+    // Use a more specific check for the file from multer
+    const file = (req as any).file;
+
+    if (!file) {
+      res.status(400).json({ success: false, message: "Completion image is required" });
+      return;
+    }
+
+    const activity = await completePracticeActivity(
+      userId,
+      activityId as string,
+      file.buffer,
+      notes
+    );
+
+    logger.info("Practice activity completion evidence uploaded", { activityId, userId });
+    res.status(200).json({
+      success: true,
+      message: "Completion evidence uploaded successfully. AI verification in progress.",
+      data: activity,
+    });
+  } catch (error: any) {
+    logger.error("Error completing activity", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to complete activity",
     });
   }
 };

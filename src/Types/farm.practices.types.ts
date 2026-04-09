@@ -16,15 +16,18 @@ export interface IPracticeActivityLogs extends Document {
   farmId: IFarm["_id"];
   practiceId: IPractices["_id"];
   cropSeasonId?: ICropSeason["_id"];
-  cropId: ICrop["_id"]; // add this
+  cropId: ICrop["_id"];
   soilType: "clay" | "sandy" | "loamy" | "silty" | "peaty" | "laterite" | "clay-loam"| "sandy-loam";
   startDate: Date;
   endDate: Date;
   size: number;
   sizeUnit: "acres" | "hectares";
   notes: string;
-  status: "active" | "completed" | "paused";
-  appliedBy: IUser["_id"]; // who logged the practice
+  status: "active" | "pending_start" | "pending_end" | "completed" | "failed";
+  startEvidenceId?: IEvidence["_id"];
+  endEvidenceId?: IEvidence["_id"];
+  verificationFlags: string[];
+  appliedBy: IUser["_id"];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,6 +88,13 @@ export interface IEvidence extends Document {
   practiceLogId: IPracticeActivityLogs["_id"];
   imageUrl: string;
   description?: string;
+  evidenceType: "start" | "end";
+  exifData?: {
+    latitude?: number;
+    longitude?: number;
+    takenAt?: Date;
+    cameraModel?: string;
+  };
   uploadedBy: IUser["_id"];
   uploadedAt: Date;
   createdAt: Date;
