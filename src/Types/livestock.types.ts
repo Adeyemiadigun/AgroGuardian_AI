@@ -38,6 +38,10 @@ export type HealthStatus =
 export type PoultryType = 
   | "broiler" 
   | "layer" 
+  | "noiler"
+  | "kuroiler"
+  | "cockerel"
+  | "pullet"
   | "dual_purpose" 
   | "turkey" 
   | "duck" 
@@ -158,6 +162,8 @@ export interface IMedication {
 export interface ILivestockDiagnosisChatMessage {
   role: "user" | "assistant";
   content: string;
+  structured?: any;
+  reasoning_details?: any;
   timestamp: Date;
 }
 
@@ -201,7 +207,7 @@ export interface ILivestockDiagnosis extends Document {
   };
 
   // Status tracking (keep in sync with Models\LivestockHealth.ts)
-  status: "processing" | "completed" | "detected" | "treating" | "resolved" | "failed";
+  status: "processing" | "completed" | "detected" | "treating" | "treated" | "resolved" | "failed";
   aiModel: string;
   analyzedAt?: Date;
 
@@ -316,34 +322,69 @@ export interface ILivestockFeeding extends Document {
 }
 
 // Breeding records
+export type BreedingFollowUpType =
+  | 'confirm_pregnancy'
+  | 'antenatal_check'
+  | 'nutrition_check'
+  | 'vaccination'
+  | 'deworming'
+  | 'prepare_birth'
+  | 'monitor_labor'
+  | 'postpartum_check';
+
+export type BreedingFollowUpStatus = 'pending' | 'done' | 'skipped';
+
+export interface IBreedingFollowUp {
+  _id?: Types.ObjectId;
+  title: string;
+  type: BreedingFollowUpType;
+  dueDate: Date;
+  status: BreedingFollowUpStatus;
+  completedAt?: Date;
+  reminderSentAt?: Date;
+  notes?: string;
+}
+
 export interface ILivestockBreeding extends Document {
   farmId: IFarm["_id"];
   owner: IUser["_id"];
-  
+
   // Parents
   damId: ILivestock["_id"]; // Mother
   sireId?: ILivestock["_id"]; // Father (optional for AI)
-  
+
   // Breeding event
   breedingDate: Date;
   breedingMethod: "natural" | "artificial_insemination";
-  
+
   // Pregnancy tracking
   isPregnant?: boolean;
   expectedDueDate?: Date;
   gestationDays?: number;
-  
+  pregnancyConfirmedAt?: Date;
+
+  // Follow-ups / antenatal checkups
+  followUps?: IBreedingFollowUp[];
+
   // Birth outcome
   birthDate?: Date;
   offspringCount?: number;
   offspringIds?: Types.ObjectId[];
   birthComplications?: string;
-  
+  birthOutcome?: {
+    numberOfOffspring?: number;
+    maleCount?: number;
+    femaleCount?: number;
+    stillborn?: number;
+    birthWeight?: number;
+    notes?: string;
+  };
+
   // Status
   status: "bred" | "confirmed_pregnant" | "delivered" | "failed" | "aborted";
-  
+
   notes?: string;
-  
+
   createdAt: Date;
   updatedAt: Date;
 }
@@ -354,7 +395,7 @@ export interface ILivestockInventory extends Document {
   owner: IUser["_id"];
   livestockId?: ILivestock["_id"];
   
-  transactionType: "purchase" | "sale" | "birth" | "death" | "gift_in" | "gift_out" | "transfer";
+  transactionType: "purchase" | "sale" | "birth" | "death" | "gift_in" | "gift_out" | "transfer" | "transfer_in" | "transfer_out";
   
   // Animal details
   species: LivestockSpecies;
@@ -408,6 +449,8 @@ export interface IVetMessage {
   role: "user" | "assistant";
   content: string;
   imageUrls?: string[];
+  structured?: any;
+  reasoning_details?: any;
   timestamp: Date;
 }
 

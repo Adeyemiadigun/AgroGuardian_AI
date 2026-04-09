@@ -125,7 +125,7 @@ const livestockDiagnosisSchema = new Schema<ILivestockDiagnosis>(
     // Status
     status: {
       type: String,
-      enum: ["processing", "completed", "detected", "treating", "resolved", "failed"],
+      enum: ["processing", "completed", "detected", "treating", "treated", "resolved", "failed"],
       default: "processing"
     },
     aiModel: { type: String, required: true },
@@ -147,6 +147,8 @@ const livestockDiagnosisSchema = new Schema<ILivestockDiagnosis>(
     chatMessages: [{
       role: { type: String, enum: ["user", "assistant"], required: true },
       content: { type: String, required: true },
+      structured: { type: Schema.Types.Mixed },
+      reasoning_details: { type: Schema.Types.Mixed },
       timestamp: { type: Date, default: Date.now }
     }]
   },

@@ -64,7 +64,19 @@ const livestockSchema = new Schema<ILivestock>(
     // Poultry/Fish specifics
     poultryType: {
       type: String,
-      enum: ["broiler", "layer", "dual_purpose", "turkey", "duck", "guinea_fowl", "quail"]
+      enum: [
+        "broiler",
+        "layer",
+        "noiler",
+        "kuroiler",
+        "cockerel",
+        "pullet",
+        "dual_purpose",
+        "turkey",
+        "duck",
+        "guinea_fowl",
+        "quail"
+      ]
     },
     fishType: {
       type: String,

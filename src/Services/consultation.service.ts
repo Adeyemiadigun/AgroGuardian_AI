@@ -81,7 +81,7 @@ export const sendConsultationMessage = async (
   userId: string,
   message: string,
   imageBuffers?: Buffer[]
-): Promise<{ consultation: IConsultation; aiResponse: string }> => {
+): Promise<{ consultation: IConsultation; aiResponse: string; aiReasoningDetails?: any }> => {
   const consultation = await Consultation.findOne({ _id: consultationId, userId });
   if (!consultation) {
     throw new Error("Consultation not found");
@@ -132,7 +132,8 @@ export const sendConsultationMessage = async (
   const chatHistory = consultation.messages.slice(-10).map(msg => ({
     role: msg.role as "user" | "assistant",
     content: msg.content,
-    imageUrls: msg.imageUrls
+    imageUrls: msg.imageUrls,
+    reasoning_details: (msg as any).reasoning_details,
   }));
 
   // Get AI response
@@ -154,10 +155,13 @@ export const sendConsultationMessage = async (
     }
   );
 
+  const aiReasoningDetails = (aiResult as any).reasoning_details;
+
   // Add AI response
   consultation.messages.push({
     role: "assistant",
     content: aiResult.response,
+    reasoning_details: aiReasoningDetails,
     timestamp: new Date()
   });
 
@@ -195,7 +199,7 @@ export const sendConsultationMessage = async (
 
   logger.info(`Consultation message sent for ${consultationId}, images: ${imageUrls.length}`);
 
-  return { consultation, aiResponse: aiResult.response };
+  return { consultation, aiResponse: aiResult.response, aiReasoningDetails };
 };
 
 export const updateConsultationStatus = async (

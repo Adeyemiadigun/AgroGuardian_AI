@@ -66,6 +66,8 @@ export class VetConsultationController {
         data: {
           userMessage: message,
           aiResponse: result.aiResponse,
+          aiStructured: (result as any).aiStructured,
+          aiReasoningDetails: (result as any).aiReasoningDetails,
           totalMessages: result.consultation.messages.length
         }
       });

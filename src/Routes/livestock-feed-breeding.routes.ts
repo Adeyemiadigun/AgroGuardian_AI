@@ -83,6 +83,22 @@ router.put(
   livestockFeedBreedingController.updateBreedingRecord.bind(livestockFeedBreedingController)
 );
 
+// Confirm pregnancy + follow-ups
+router.post(
+  '/breeding/:breedingId/confirm-pregnancy',
+  livestockFeedBreedingController.confirmPregnancy.bind(livestockFeedBreedingController)
+);
+
+router.get(
+  '/breeding/:breedingId/follow-ups',
+  livestockFeedBreedingController.getBreedingFollowUps.bind(livestockFeedBreedingController)
+);
+
+router.patch(
+  '/breeding/:breedingId/follow-ups/:followUpId',
+  livestockFeedBreedingController.updateBreedingFollowUp.bind(livestockFeedBreedingController)
+);
+
 router.post(
   '/breeding/:breedingId/birth',
   livestockFeedBreedingController.recordBirth.bind(livestockFeedBreedingController)

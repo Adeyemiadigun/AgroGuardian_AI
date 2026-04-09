@@ -6,6 +6,7 @@ export interface IConsultationMessage {
     role: "user" | "assistant";
     content: string;
     imageUrls?: string[];
+    reasoning_details?: any;
     timestamp: Date;
 }
 

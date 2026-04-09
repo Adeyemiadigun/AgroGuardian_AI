@@ -5,6 +5,7 @@ const consultationMessageSchema = new Schema({
     role: { type: String, enum: ["user", "assistant"], required: true },
     content: { type: String, required: true },
     imageUrls: [{ type: String }],
+    reasoning_details: { type: Schema.Types.Mixed },
     timestamp: { type: Date, default: Date.now }
 }, { _id: true });
 

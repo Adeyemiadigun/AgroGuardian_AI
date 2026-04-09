@@ -3,9 +3,11 @@ import Livestock from '../Models/Livestock';
 import Farm from '../Models/Farm';
 import WeatherData from '../Models/WeatherData';
 import logger from '../Utils/logger';
-import { LivestockVaccination, LivestockTreatment, LivestockIllness, LivestockDeworming } from '../Models/LivestockHealth';
+import { LivestockVaccination, LivestockTreatment, LivestockIllness, LivestockDeworming, LivestockDiagnosis } from '../Models/LivestockHealth';
 import { LivestockHealthCheckReport } from '../Models/LivestockHealthCheck';
 import { chatWithContext, getModelName } from '../Utils/geminiClient';
+import { extractJsonFromLLM } from '../Utils/llmJson';
+import { z } from 'zod';
 import type { ILivestock } from '../Types/livestock.types';
 
 export type HealthCheckStatus = 'ok' | 'warning' | 'critical' | 'unknown';
@@ -14,6 +16,22 @@ type RecomputeOptions = {
   reason?: string;
   useAI?: boolean;
 };
+
+const HealthCheckAiEnhancementSchema = z.object({
+  aiSummary: z.string().optional(),
+  overallStatus: z.enum(['ok', 'warning', 'critical', 'unknown']).optional(),
+  checks: z
+    .array(
+      z.object({
+        key: z.string(),
+        status: z.enum(['ok', 'warning', 'critical', 'unknown']).optional(),
+        findings: z.array(z.string()).optional(),
+        recommendations: z.array(z.string()).optional(),
+      })
+    )
+    .optional(),
+  flags: z.array(z.string()).optional(),
+});
 
 const STATUS_RANK: Record<HealthCheckStatus, number> = {
   ok: 0,
@@ -44,12 +62,33 @@ const poultryBroilerExpectedKgByWeek: Array<{ week: number; min: number; max: nu
   { week: 8, min: 2.30, max: 3.60 },
 ];
 
+const poultryNoilerExpectedKgByWeek: Array<{ week: number; min: number; max: number }> = [
+  { week: 1, min: 0.07, max: 0.14 },
+  { week: 2, min: 0.15, max: 0.25 },
+  { week: 3, min: 0.25, max: 0.40 },
+  { week: 4, min: 0.40, max: 0.60 },
+  { week: 5, min: 0.55, max: 0.80 },
+  { week: 6, min: 0.70, max: 1.00 },
+  { week: 7, min: 0.85, max: 1.20 },
+  { week: 8, min: 1.00, max: 1.40 },
+  { week: 9, min: 1.15, max: 1.60 },
+  { week: 10, min: 1.30, max: 1.80 },
+  { week: 11, min: 1.45, max: 2.00 },
+  { week: 12, min: 1.60, max: 2.20 },
+];
+
 const getBroilerExpectedRange = (ageWeeks: number) => {
   const w = Math.max(1, Math.min(8, Math.round(ageWeeks)));
   return poultryBroilerExpectedKgByWeek.find((x) => x.week === w);
 };
 
+const getNoilerExpectedRange = (ageWeeks: number) => {
+  const w = Math.max(1, Math.min(12, Math.round(ageWeeks)));
+  return poultryNoilerExpectedKgByWeek.find((x) => x.week === w);
+};
+
 const computeTHI = (tempC: number, rh: number) => tempC - (0.55 - 0.0055 * rh) * (tempC - 14.5);
+
 
 const HEALTHCHECK_AI_SYSTEM_PROMPT = `You are a veterinary and livestock production expert.
 
@@ -70,6 +109,7 @@ Hard rules:
 - Do NOT hallucinate missing fields.
 - If data is insufficient, mark the check status as "unknown" and explicitly list missing data.
 - Output STRICT JSON ONLY.
+- Do NOT wrap the JSON in markdown or code fences (no triple-backtick fences).
 
 Response JSON schema:
 {
@@ -121,14 +161,89 @@ export class LivestockHealthCheckService {
 
     const livestockObjectId = new Types.ObjectId(livestockId);
 
-    const [lastVaccination, lastDeworming, activeIllnessCount, ongoingTreatmentCount] = await Promise.all([
+    const [lastVaccination, lastDeworming, activeIllnessCount, ongoingTreatmentCount, unresolvedDiagnoses] = await Promise.all([
       LivestockVaccination.findOne({ livestockId: livestockObjectId }).sort({ dateAdministered: -1 }).lean(),
       LivestockDeworming.findOne({ livestockId: livestockObjectId }).sort({ dateAdministered: -1 }).lean(),
       LivestockIllness.countDocuments({ livestockId: livestockObjectId, status: { $in: ['active', 'under_treatment'] } }),
       LivestockTreatment.countDocuments({ livestockId: livestockObjectId, status: 'ongoing' }),
+      LivestockDiagnosis.find({
+        livestockId: livestockObjectId,
+        userId: (livestock as any).owner,
+        status: { $in: ['processing', 'detected', 'treating', 'treated'] },
+      })
+        .sort({ createdAt: -1 })
+        .limit(3)
+        .lean(),
     ]);
 
+    const unresolvedDiagnosisList = Array.isArray(unresolvedDiagnoses) ? unresolvedDiagnoses : [];
+    const unresolvedDiagnosisCount = unresolvedDiagnosisList.length;
+    const hasCriticalUnresolvedDiagnosis = unresolvedDiagnosisList.some(
+      (d: any) => d?.severity === 'critical' || d?.urgency === 'immediate'
+    );
+
     const checks: any[] = [];
+
+    // Active AI diagnosis alert (unresolved)
+    {
+      if (unresolvedDiagnosisCount > 0) {
+        const latest = unresolvedDiagnosisList[0];
+        const status: HealthCheckStatus = hasCriticalUnresolvedDiagnosis ? 'critical' : 'warning';
+        const findings: string[] = [];
+        const recommendations: string[] = [];
+
+        const diagnoses = Array.from(
+          new Set(
+            unresolvedDiagnosisList
+              .map((d: any) => String(d?.diagnosis || '').trim())
+              .filter(Boolean)
+              .map((s) => s.replace(/\s+/g, ' '))
+          )
+        ).slice(0, 3);
+
+        findings.push(`${unresolvedDiagnosisCount} active AI diagnosis(es) need attention.`);
+        if (diagnoses.length) findings.push(`Detected: ${diagnoses.join(' | ')}`);
+
+        const treatedCount = unresolvedDiagnosisList.filter((d: any) => d?.status === 'treated').length;
+        const actionableDiagnosisList = unresolvedDiagnosisList.filter((d: any) => d?.status !== 'treated');
+
+        const treatmentSteps = Array.from(
+          new Set(
+            actionableDiagnosisList
+              .flatMap((d: any) => (Array.isArray(d?.treatment) ? d.treatment : []))
+              .map((s: any) => String(s).trim())
+              .filter(Boolean)
+          )
+        ).slice(0, 8);
+
+        for (const step of treatmentSteps) {
+          findings.push(`Treatment: ${step}`);
+        }
+
+        if (treatedCount > 0) {
+          findings.push(
+            `${treatedCount} diagnosis(es) have treatment plan marked completed. Monitor recovery, then mark the diagnosis as resolved when fully cured.`
+          );
+        }
+
+        if (treatmentSteps.length === 0 && latest?.status === 'processing') {
+          findings.push('Diagnosis is still processing — check back shortly for treatment guidance.');
+        }
+
+        if (latest?.vetVisitRecommended || hasCriticalUnresolvedDiagnosis) {
+          recommendations.push('If symptoms are severe/worsening, consult a veterinarian urgently.');
+        }
+
+        checks.push({
+          key: 'ai_diagnosis_alert',
+          title: 'Active AI diagnosis alert',
+          status,
+          findings,
+          recommendations,
+          data: { unresolvedDiagnosisCount },
+        });
+      }
+    }
 
     // Data quality
     {
@@ -161,22 +276,39 @@ export class LivestockHealthCheckService {
       const data: any = { weightKg, ageDays, ageWeeks };
 
       if (weightKg != null && ageWeeks != null) {
-        if ((livestock as any).species === 'poultry' && (livestock as any).poultryType === 'broiler') {
-          const expected = getBroilerExpectedRange(ageWeeks);
+        if ((livestock as any).species === 'poultry') {
+          const poultryType = (livestock as any).poultryType as string | undefined;
+
+          const isBroiler = poultryType === 'broiler';
+          const isNoilerLike = poultryType === 'noiler' || poultryType === 'kuroiler';
+
+          const expected = isBroiler
+            ? getBroilerExpectedRange(ageWeeks)
+            : isNoilerLike
+            ? getNoilerExpectedRange(ageWeeks)
+            : undefined;
+
           if (expected) {
+            data.poultryType = poultryType;
             data.expected = expected;
+            const label = isBroiler ? 'broiler' : (poultryType || 'poultry');
+
             if (weightKg < expected.min * 0.85) {
               status = 'warning';
-              findings.push(`Average weight (${weightKg}kg) is below expected range for ~week ${expected.week}.`);
+              findings.push(`Average weight (${weightKg}kg) is below expected range for ~week ${expected.week} (${label} heuristic).`);
               recommendations.push('Review feed quality/quantity, water availability, stocking density, and parasite control.');
             } else if (weightKg > expected.max * 1.25) {
               status = 'warning';
-              findings.push(`Average weight (${weightKg}kg) is above expected range for ~week ${expected.week}.`);
+              findings.push(`Average weight (${weightKg}kg) is above expected range for ~week ${expected.week} (${label} heuristic).`);
               recommendations.push('Check feeding program and watch for leg problems/overconditioning.');
             } else {
               status = 'ok';
-              findings.push('Weight appears within expected range for age (broiler heuristic).');
+              findings.push(`Weight appears within expected range for age (${label} heuristic).`);
             }
+          } else {
+            status = 'unknown';
+            findings.push('Insufficient poultry-type-specific growth reference data for accurate growth scoring.');
+            recommendations.push('Add periodic weight records and ensure poultry type is set (e.g., broiler, noiler, layer) to improve growth assessment.');
           }
         } else {
           // For other species, we avoid pretending precision.
@@ -211,6 +343,28 @@ export class LivestockHealthCheckService {
         recommendations.push('Log vaccinations and deworming schedules to track preventive care.');
       }
 
+      if (unresolvedDiagnosisCount > 0) {
+        status = maxStatus(status, hasCriticalUnresolvedDiagnosis ? 'critical' : 'warning');
+        findings.push(`${unresolvedDiagnosisCount} unresolved AI diagnosis(es) found.`);
+
+        const preventionSteps = Array.from(
+          new Set(
+            unresolvedDiagnosisList
+              .flatMap((d: any) => (Array.isArray(d?.prevention) ? d.prevention : []))
+              .map((s: any) => String(s).trim())
+              .filter(Boolean)
+          )
+        ).slice(0, 5);
+
+        for (const step of preventionSteps) {
+          findings.push(`Preventive care: ${step}`);
+        }
+
+        if (preventionSteps.length === 0) {
+          recommendations.push('Review the unresolved diagnosis and follow its listed prevention guidance (biosecurity, hygiene, isolation, vaccination/deworming as applicable).');
+        }
+      }
+
       checks.push({
         key: 'preventive_care',
         title: 'Preventive care',
@@ -220,6 +374,7 @@ export class LivestockHealthCheckService {
         data: {
           lastVaccinationDate: lastVaxDate,
           lastDewormingDate: lastDewormDate,
+          unresolvedDiagnosisCount,
         },
       });
     }
@@ -240,8 +395,34 @@ export class LivestockHealthCheckService {
         findings.push(`${ongoingTreatmentCount} ongoing treatment(s).`);
         recommendations.push('Ensure treatment completion and follow-up checks.');
       }
+
+      if (unresolvedDiagnosisCount > 0) {
+        status = maxStatus(status, hasCriticalUnresolvedDiagnosis ? 'critical' : 'warning');
+        const latest = unresolvedDiagnosisList[0];
+        const latestLabel = String(latest?.diagnosis || '').trim().replace(/\s+/g, ' ').slice(0, 140);
+        findings.push(
+          `${unresolvedDiagnosisCount} unresolved AI diagnosis(es) detected${latestLabel ? ` (latest: ${latestLabel})` : ''}.`
+        );
+
+        const treatmentSteps = Array.from(
+          new Set(
+            (Array.isArray(latest?.treatment) ? latest.treatment : [])
+              .map((s: any) => String(s).trim())
+              .filter(Boolean)
+          )
+        ).slice(0, 3);
+
+        for (const step of treatmentSteps) {
+          recommendations.push(`AI suggested: ${step}`);
+        }
+
+        if (latest?.vetVisitRecommended || latest?.severity === 'critical') {
+          recommendations.push('If the animal looks critical or symptoms worsen, consult a veterinarian urgently.');
+        }
+      }
+
       if (status === 'ok') {
-        findings.push('No active illness or ongoing treatment flagged from records.');
+        findings.push('No active illness, ongoing treatment, or unresolved AI diagnosis flagged from records.');
       }
 
       checks.push({
@@ -250,7 +431,7 @@ export class LivestockHealthCheckService {
         status,
         findings,
         recommendations,
-        data: { activeIllnessCount, ongoingTreatmentCount },
+        data: { activeIllnessCount, ongoingTreatmentCount, unresolvedDiagnosisCount },
       });
     }
 
@@ -317,6 +498,7 @@ export class LivestockHealthCheckService {
         lastDeworming: lastDeworming ? { dateAdministered: (lastDeworming as any).dateAdministered, product: (lastDeworming as any).dewormerName } : null,
         activeIllnessCount,
         ongoingTreatmentCount,
+        unresolvedDiagnosisCount,
       },
       ruleChecks: checks.map((c) => ({ key: c.key, status: c.status, findings: c.findings, recommendations: c.recommendations, data: c.data })),
     };
@@ -325,9 +507,18 @@ export class LivestockHealthCheckService {
     const useAI = Boolean(opts.useAI);
 
     if (useAI && process.env.AICCS_API_KEY) {
+      const parseAi = (raw: string) => HealthCheckAiEnhancementSchema.parse(JSON.parse(extractJsonFromLLM(raw)));
+
       try {
         const aiRaw = await chatWithContext(JSON.stringify(basePayload), [], HEALTHCHECK_AI_SYSTEM_PROMPT);
-        aiEnhancement = JSON.parse(aiRaw);
+        try {
+          aiEnhancement = parseAi(aiRaw);
+        } catch (e1: any) {
+          const bad = String(aiRaw || '').slice(0, 6000);
+          const repairMsg = `Your previous response was not valid JSON or did not match the required schema.\n\nInvalid output (truncated):\n${bad}\n\nReturn ONLY a corrected JSON object that matches the schema. No markdown. No code fences.`;
+          const repaired = await chatWithContext(repairMsg, [], HEALTHCHECK_AI_SYSTEM_PROMPT);
+          aiEnhancement = parseAi(repaired);
+        }
       } catch (e: any) {
         logger.warn(`HealthCheck AI enhancement failed: ${e?.message || e}`);
       }

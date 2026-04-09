@@ -128,7 +128,14 @@ export class LivestockFeedBreedingController {
         message: 'Breeding record added',
         data: breeding
       });
-    } catch (error) {
+    } catch (error: any) {
+      // Convert schema validation issues into a client error instead of a 500
+      if (error?.name === 'ValidationError' || String(error?.message || '').toLowerCase().includes('damid')) {
+        return res.status(400).json({
+          success: false,
+          message: error?.message || 'Invalid breeding record data',
+        });
+      }
       next(error);
     }
   }
@@ -177,6 +184,58 @@ export class LivestockFeedBreedingController {
       res.json({
         success: true,
         data: births
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async confirmPregnancy(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { breedingId } = req.params;
+      const record = await livestockFeedBreedingService.confirmPregnancy(breedingId, req.body || {});
+
+      if (!record) {
+        return res.status(404).json({ success: false, message: 'Breeding record not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Pregnancy confirmed',
+        data: record
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getBreedingFollowUps(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { breedingId } = req.params;
+      const followUps = await livestockFeedBreedingService.getBreedingFollowUps(breedingId);
+
+      res.json({
+        success: true,
+        data: followUps
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateBreedingFollowUp(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { breedingId, followUpId } = req.params;
+      const updated = await livestockFeedBreedingService.updateBreedingFollowUp(breedingId, followUpId, req.body || {});
+
+      if (!updated) {
+        return res.status(404).json({ success: false, message: 'Follow-up not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Follow-up updated',
+        data: updated
       });
     } catch (error) {
       next(error);

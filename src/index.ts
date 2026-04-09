@@ -7,6 +7,7 @@ import express from 'express';
 import type { Express , Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { connectDB } from './Config/db';
+import { isRedisQueueEnabled } from './Config/queueMode';
 import logger from './Utils/logger';
 import passport from './Config/passport';
 
@@ -33,6 +34,8 @@ import { initResilienceWorker } from './Workers/resilience.worker';
 import { initEmailWorker } from './Workers/email.worker';
 import { initWeatherSyncWorker } from './Workers/weatherSync.worker';
 import { initDailyWeatherSync } from './Queues/weatherSync.queue';
+import { initBreedingFollowUpReminderWorker } from './Workers/breedingFollowUpReminder.worker';
+import { initBreedingFollowUpReminderSchedule } from './Queues/breedingFollowUpReminder.queue';
 import { initDiagnosisWorker } from './Workers/diagnosis.worker';
 import { initLivestockDiagnosisWorker } from './Workers/livestockDiagnosis.worker';
 import { initLivestockHealthCheckWorker } from './Workers/livestockHealthCheck.worker';
@@ -42,17 +45,31 @@ const PORT = process.env.PORT || 5000;
 
 connectDB()
 
-// Initialize Workers
-initResilienceWorker();
-initEmailWorker();
-initWeatherSyncWorker();
+// Initialize Workers (BullMQ)
+// NOTE: BullMQ generates a lot of Redis commands; use QUEUE_MODE=inline for dev to avoid Upstash request caps.
 
-const weatherSyncInterval = (process.env.WEATHER_SYNC_INTERVAL || '6-hourly') as any;
-initDailyWeatherSync(weatherSyncInterval); 
+const runWorkers = process.env.RUN_WORKERS
+  ? process.env.RUN_WORKERS === 'true'
+  : isRedisQueueEnabled();
 
-initDiagnosisWorker();
-initLivestockDiagnosisWorker();
-initLivestockHealthCheckWorker();
+if (runWorkers) {
+  initResilienceWorker();
+  initEmailWorker();
+  initWeatherSyncWorker();
+
+  const weatherSyncInterval = (process.env.WEATHER_SYNC_INTERVAL || '6-hourly') as any;
+  initDailyWeatherSync(weatherSyncInterval);
+
+  initBreedingFollowUpReminderWorker();
+  const breedingReminderInterval = (process.env.BREEDING_FOLLOWUP_REMINDER_INTERVAL || 'hourly') as any;
+  initBreedingFollowUpReminderSchedule(breedingReminderInterval);
+
+  initDiagnosisWorker();
+  initLivestockDiagnosisWorker();
+  initLivestockHealthCheckWorker();
+} else {
+  logger.warn('Queue workers are disabled (RUN_WORKERS=false or QUEUE_MODE=inline).');
+}
 
 app.use(cors({
     origin: [

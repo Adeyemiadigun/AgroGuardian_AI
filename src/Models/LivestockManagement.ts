@@ -68,12 +68,47 @@ const livestockBreedingSchema = new Schema<ILivestockBreeding>(
     isPregnant: { type: Boolean },
     expectedDueDate: { type: Date },
     gestationDays: { type: Number },
+    pregnancyConfirmedAt: { type: Date },
+
+    // Follow-ups / antenatal checkups
+    followUps: [
+      {
+        title: { type: String, required: true },
+        type: {
+          type: String,
+          enum: [
+            'confirm_pregnancy',
+            'antenatal_check',
+            'nutrition_check',
+            'vaccination',
+            'deworming',
+            'prepare_birth',
+            'monitor_labor',
+            'postpartum_check',
+          ],
+          required: true,
+        },
+        dueDate: { type: Date, required: true },
+        status: { type: String, enum: ['pending', 'done', 'skipped'], default: 'pending' },
+        completedAt: { type: Date },
+        reminderSentAt: { type: Date },
+        notes: { type: String },
+      },
+    ],
 
     // Birth outcome
     birthDate: { type: Date },
     offspringCount: { type: Number },
     offspringIds: [{ type: Schema.Types.ObjectId, ref: "Livestock" }],
     birthComplications: { type: String },
+    birthOutcome: {
+      numberOfOffspring: { type: Number },
+      maleCount: { type: Number },
+      femaleCount: { type: Number },
+      stillborn: { type: Number },
+      birthWeight: { type: Number },
+      notes: { type: String },
+    },
 
     // Status
     status: {
@@ -105,7 +140,7 @@ const livestockInventorySchema = new Schema<ILivestockInventory>(
 
     transactionType: {
       type: String,
-      enum: ["purchase", "sale", "birth", "death", "gift_in", "gift_out", "transfer"],
+      enum: ["purchase", "sale", "birth", "death", "gift_in", "gift_out", "transfer", "transfer_in", "transfer_out"],
       required: true
     },
 
@@ -152,6 +187,8 @@ const vetMessageSchema = new Schema({
   role: { type: String, enum: ["user", "assistant"], required: true },
   content: { type: String, required: true },
   imageUrls: [{ type: String }],
+  structured: { type: Schema.Types.Mixed },
+  reasoning_details: { type: Schema.Types.Mixed },
   timestamp: { type: Date, default: Date.now }
 }, { _id: true });
 

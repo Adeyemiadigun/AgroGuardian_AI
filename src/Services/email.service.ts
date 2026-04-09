@@ -58,6 +58,38 @@ export const sendVerificationEmail = async (
 };
 
 
+export const sendBreedingFollowUpReminderEmail = async (
+  email: string,
+  args: {
+    title: string;
+    dueDate: Date;
+    farmName?: string;
+    damName?: string;
+    species?: string;
+  }
+): Promise<void> => {
+  const due = new Date(args.dueDate);
+  const dueText = Number.isNaN(due.getTime()) ? '' : due.toLocaleDateString();
+
+  const subject = `Breeding follow-up due: ${args.title}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d7a3a;">🐾 Breeding Follow-up Reminder</h2>
+      <p>You have a breeding follow-up due${dueText ? ` on <strong>${dueText}</strong>` : ''}.</p>
+      <div style="background: #f6ffed; border: 1px solid #b7eb8f; padding: 12px; border-radius: 8px; margin: 12px 0;">
+        <p style="margin: 0;"><strong>Task:</strong> ${args.title}</p>
+        ${args.farmName ? `<p style="margin: 6px 0 0;"><strong>Farm:</strong> ${args.farmName}</p>` : ''}
+        ${args.damName ? `<p style="margin: 6px 0 0;"><strong>Dam:</strong> ${args.damName}${args.species ? ` (${args.species})` : ''}</p>` : ''}
+      </div>
+      <p>Please open AgroGuardian and complete the task on the due date.</p>
+      <p style="color: #999; font-size: 12px;">If you believe this reminder is incorrect, you can review your breeding record in the app.</p>
+    </div>
+  `;
+
+  await addEmailToQueue(email, subject, htmlContent);
+};
+
 export const sendPasswordResetEmail = async (
   email: string,
   token: string

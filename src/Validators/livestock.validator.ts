@@ -6,7 +6,19 @@ const trackingTypeEnum = z.enum(["individual", "batch"]);
 const genderEnum = z.enum(["male", "female", "unknown"]);
 const statusEnum = z.enum(["active", "sold", "deceased", "quarantined", "breeding"]);
 const healthStatusEnum = z.enum(["healthy", "sick", "recovering", "under_treatment", "critical"]);
-const poultryTypeEnum = z.enum(["broiler", "layer", "dual_purpose", "turkey", "duck", "guinea_fowl", "quail"]);
+const poultryTypeEnum = z.enum([
+  "broiler",
+  "layer",
+  "noiler",
+  "kuroiler",
+  "cockerel",
+  "pullet",
+  "dual_purpose",
+  "turkey",
+  "duck",
+  "guinea_fowl",
+  "quail",
+]);
 const fishTypeEnum = z.enum(["tilapia", "catfish", "carp", "salmon", "trout", "other"]);
 
 // Create Livestock Schema
@@ -111,6 +123,11 @@ export const updateLivestockSchema = z.object({
   markings: z.string().max(200).optional(),
   status: statusEnum.optional(),
   healthStatus: healthStatusEnum.optional(),
+
+  // Species-specific (allow updating type)
+  poultryType: poultryTypeEnum.optional(),
+  fishType: fishTypeEnum.optional(),
+
   housingUnit: z.string().max(100).optional(),
   notes: z.string().max(1000).optional()
 });

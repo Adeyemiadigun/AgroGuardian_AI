@@ -1,21 +1,34 @@
-import { Queue } from "bullmq";
-import { redisConnection } from "../Config/redis";
-import logger from "../Utils/logger";
+import { Queue } from 'bullmq';
+import { redisConnection } from '../Config/redis';
+import { isRedisQueueEnabled } from '../Config/queueMode';
+import logger from '../Utils/logger';
 
-export const EMAIL_QUEUE = "email-queue";
+export const EMAIL_QUEUE = 'email-queue';
 
-const emailQueue = new Queue(EMAIL_QUEUE, {
-  connection: redisConnection as any,
-});
+let emailQueue: Queue | null = null;
+const getEmailQueue = () => {
+  if (!emailQueue) {
+    emailQueue = new Queue(EMAIL_QUEUE, {
+      connection: redisConnection as any,
+    });
+  }
+  return emailQueue;
+};
 
 export const addEmailToQueue = async (to: string, subject: string, html: string) => {
+  if (!isRedisQueueEnabled()) {
+    // Dev-safe: avoid Redis/BullMQ. (Email sending can be enabled later if needed.)
+    logger.warn(`Email queue disabled (QUEUE_MODE=inline). Skipping email to: ${to}`);
+    return;
+  }
+
   try {
-    await emailQueue.add(
-      "send-email",
+    await getEmailQueue().add(
+      'send-email',
       { to, subject, html },
       {
         attempts: 5,
-        backoff: { type: "exponential", delay: 10000 },
+        backoff: { type: 'exponential', delay: 10000 },
         removeOnComplete: true,
       }
     );

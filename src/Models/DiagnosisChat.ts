@@ -7,6 +7,7 @@ const chatMessageSchema = new Schema<IDiagnosisChat>({
     messages: [{
         role: { type: String, enum: ["user", "assistant"], required: true },
         content: { type: String, required: true },
+        reasoning_details: { type: Schema.Types.Mixed },
         timestamp: { type: Date, default: Date.now }
     }],
 },{

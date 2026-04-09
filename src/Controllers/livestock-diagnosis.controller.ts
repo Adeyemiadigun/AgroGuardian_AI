@@ -167,7 +167,7 @@ export class LivestockDiagnosisController {
       const diagnosisId = req.params.diagnosisId as string;
       const userId = (req as any).userId as string;
 
-      const allowedStatuses = ['detected', 'treating', 'resolved'] as const;
+      const allowedStatuses = ['detected', 'treating', 'treated', 'resolved'] as const;
       type AllowedStatus = (typeof allowedStatuses)[number];
 
       const statusRaw = (req.body as any).status;
@@ -176,7 +176,7 @@ export class LivestockDiagnosisController {
       if (typeof statusStr !== 'string' || !allowedStatuses.includes(statusStr as AllowedStatus)) {
         return res.status(400).json({
           success: false,
-          message: 'Invalid status. Must be: detected, treating, or resolved'
+          message: 'Invalid status. Must be: detected, treating, treated, or resolved'
         });
       }
 
@@ -190,6 +190,27 @@ export class LivestockDiagnosisController {
         success: true,
         message: 'Diagnosis status updated',
         data: diagnosis
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Toggle a treatment-plan task
+   */
+  async toggleTreatmentPlanTask(req: Request, res: Response, next: NextFunction) {
+    try {
+      const diagnosisId = req.params.diagnosisId as string;
+      const taskId = req.params.taskId as string;
+      const userId = (req as any).userId as string;
+
+      const diagnosis = await livestockDiagnosisService.toggleTreatmentPlanTask(diagnosisId, userId, taskId);
+
+      res.json({
+        success: true,
+        message: 'Treatment task updated',
+        data: diagnosis,
       });
     } catch (error) {
       next(error);

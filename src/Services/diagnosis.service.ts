@@ -170,12 +170,13 @@ export const sendChatMessage = async (
   const chatHistory = chat.messages.map((msg) => ({
     role: msg.role,
     content: msg.content,
+    reasoning_details: (msg as any).reasoning_details,
   }));
 
   const farm = await Farm.findById(diagnosis.farmId);
   const latestWeather = await WeatherData.findOne({ farmId: diagnosis.farmId }).sort({ timestamp: -1 });
 
-  const aiResponse = await chatWithDiagnosis(message, chatHistory, {
+  const ai = await chatWithDiagnosis(message, chatHistory, {
     cropType: diagnosis.cropType,
     diagnosis: diagnosis.diagnosis,
     severity: diagnosis.severity,
@@ -190,7 +191,10 @@ export const sendChatMessage = async (
     } : undefined
   });
 
-  chat.messages.push({ role: "assistant", content: aiResponse, timestamp: new Date() });
+  const aiResponse = ai.content;
+  const aiReasoningDetails = ai.reasoning_details;
+
+  chat.messages.push({ role: "assistant", content: aiResponse, reasoning_details: aiReasoningDetails, timestamp: new Date() });
   await chat.save();
 
   logger.info(`Chat message sent for diagnosis ${diagnosisId}`);
@@ -198,6 +202,7 @@ export const sendChatMessage = async (
   return {
     userMessage: message,
     aiResponse,
+    aiReasoningDetails,
     totalMessages: chat.messages.length,
   };
 };

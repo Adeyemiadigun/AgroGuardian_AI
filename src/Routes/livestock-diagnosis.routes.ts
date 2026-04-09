@@ -39,6 +39,12 @@ router.patch(
   livestockDiagnosisController.updateDiagnosisStatus.bind(livestockDiagnosisController)
 );
 
+// Toggle a treatment-plan task (auto-updates diagnosis status to treating/resolved)
+router.patch(
+  '/:diagnosisId/treatment-plan/:taskId/toggle',
+  livestockDiagnosisController.toggleTreatmentPlanTask.bind(livestockDiagnosisController)
+);
+
 // Chat about diagnosis
 router.post(
   '/:diagnosisId/chat',

@@ -1,12 +1,68 @@
-import { Queue } from "bullmq";
-import { redisConnection } from "../Config/redis";
-import logger from "../Utils/logger";
+import { Queue } from 'bullmq';
+import { redisConnection } from '../Config/redis';
+import { isRedisQueueEnabled } from '../Config/queueMode';
+import Farm from '../Models/Farm';
+import { getClimateRisk } from '../Services/weather.service';
+import logger from '../Utils/logger';
 
-export const WEATHER_SYNC_QUEUE = "weather-sync-queue";
+export const WEATHER_SYNC_QUEUE = 'weather-sync-queue';
 
-const weatherSyncQueue = new Queue(WEATHER_SYNC_QUEUE, {
-  connection: redisConnection as any,
-});
+let weatherSyncQueue: Queue | null = null;
+const getWeatherSyncQueue = () => {
+  if (!weatherSyncQueue) {
+    weatherSyncQueue = new Queue(WEATHER_SYNC_QUEUE, {
+      connection: redisConnection as any,
+    });
+  }
+  return weatherSyncQueue;
+};
+
+let inlineWeatherSyncTimer: NodeJS.Timeout | null = null;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+const runWeatherSyncInline = async (farmId?: string, interval?: string, triggeredBy?: 'manual' | 'periodic') => {
+  const syncType = triggeredBy === 'manual' ? 'Manual' : `Periodic (${interval || 'scheduled'})`;
+  const startTime = Date.now();
+
+  let successCount = 0;
+  let errorCount = 0;
+  const errors: Array<{ farmId: string; farmName: string; error: string }> = [];
+
+  if (farmId) {
+    const farm = await Farm.findById(farmId);
+    if (!farm) throw new Error(`Farm ${farmId} not found`);
+
+    logger.info(`(inline) Syncing weather for farm: ${farm.name}`);
+    await getClimateRisk(farmId);
+    successCount = 1;
+  } else {
+    const activeFarms = await Farm.find({ status: 'active' });
+    logger.info(`(inline) Processing weather for ${activeFarms.length} active farms.`);
+
+    for (const farm of activeFarms) {
+      try {
+        await getClimateRisk(farm._id.toString());
+        successCount++;
+        await sleep(500);
+      } catch (error: any) {
+        errorCount++;
+        errors.push({ farmId: farm._id.toString(), farmName: farm.name, error: error.message });
+        logger.error(`(inline) Weather Sync failed for farm ${farm._id}: ${error.message}`);
+      }
+    }
+  }
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  logger.info(`(inline) ${syncType} Weather Sync completed`, {
+    duration: `${duration}s`,
+    successCount,
+    errorCount,
+    totalFarms: successCount + errorCount,
+  });
+
+  return { success: true, syncType, successCount, errorCount, duration, errors: errorCount > 0 ? errors : undefined };
+};
 
 // Configurable sync intervals (use env variable or default to 6-hourly)
 const SYNC_PATTERNS = {
@@ -19,22 +75,49 @@ const SYNC_PATTERNS = {
 
 type SyncInterval = keyof typeof SYNC_PATTERNS;
 
-export const initDailyWeatherSync = async (interval: SyncInterval = "6-hourly") => {
+export const initDailyWeatherSync = async (interval: SyncInterval = '6-hourly') => {
+  if (!isRedisQueueEnabled()) {
+    // Inline scheduler (dev): best-effort timer-based sync. Not persisted across restarts.
+    const intervalMsMap: Record<SyncInterval, number> = {
+      hourly: 60 * 60 * 1000,
+      '3-hourly': 3 * 60 * 60 * 1000,
+      '6-hourly': 6 * 60 * 60 * 1000,
+      daily: 24 * 60 * 60 * 1000,
+      'twice-daily': 12 * 60 * 60 * 1000,
+    };
+
+    if (inlineWeatherSyncTimer) return;
+
+    const ms = intervalMsMap[interval] || intervalMsMap['6-hourly'];
+    logger.warn(`Weather sync scheduler running inline every ~${Math.round(ms / 3600000)}h (QUEUE_MODE=inline)`);
+
+    // Kick off immediately, then repeat
+    setImmediate(() =>
+      runWeatherSyncInline(undefined, interval, 'periodic').catch((e) => logger.error(`(inline) Weather sync failed: ${e.message}`))
+    );
+
+    inlineWeatherSyncTimer = setInterval(() => {
+      runWeatherSyncInline(undefined, interval, 'periodic').catch((e) => logger.error(`(inline) Weather sync failed: ${e.message}`));
+    }, ms);
+
+    return;
+  }
+
   try {
     const jobId = "periodic-global-weather-sync";
     const pattern = SYNC_PATTERNS[interval] || SYNC_PATTERNS["6-hourly"];
 
     // Remove any existing repeatable jobs to avoid duplicates
-    const repeatableJobs = await weatherSyncQueue.getRepeatableJobs();
+    const repeatableJobs = await getWeatherSyncQueue().getRepeatableJobs();
     for (const job of repeatableJobs) {
       if (job.id === jobId || job.name === "daily-sync" || job.name === "periodic-sync") {
-        await weatherSyncQueue.removeRepeatableByKey(job.key);
+        await getWeatherSyncQueue().removeRepeatableByKey(job.key);
         logger.info(`Removed old weather sync job: ${job.name}`);
       }
     }
 
     // Add the new repeatable job with retry logic
-    await weatherSyncQueue.add(
+    await getWeatherSyncQueue().add(
       "periodic-sync",
       { interval, startedAt: new Date().toISOString() },
       {
@@ -60,10 +143,24 @@ export const initDailyWeatherSync = async (interval: SyncInterval = "6-hourly") 
 
 // Manual trigger for on-demand weather updates
 export const triggerWeatherSyncNow = async (farmId?: string) => {
+  if (!isRedisQueueEnabled()) {
+    const jobId = `inline-weather-sync-${Date.now()}`;
+
+    // Don't block the HTTP request thread; run in-process async.
+    setImmediate(() => {
+      runWeatherSyncInline(farmId, undefined, 'manual').catch((e) =>
+        logger.error('(inline) Manual weather sync failed', { jobId, farmId, error: e.message, stack: e.stack })
+      );
+    });
+
+    logger.info('(inline) Manual weather sync triggered', { jobId, farmId });
+    return { jobId, status: 'started' };
+  }
+
   try {
-    const job = await weatherSyncQueue.add(
+    const job = await getWeatherSyncQueue().add(
       "manual-sync",
-      { 
+      {
         farmId, // If provided, sync only this farm
         triggeredBy: "manual",
         timestamp: new Date().toISOString(),
@@ -87,4 +184,5 @@ export const triggerWeatherSyncNow = async (farmId?: string) => {
   }
 };
 
-export { weatherSyncQueue };
+export { weatherSyncQueue }; // may be null until first use
+

@@ -7,19 +7,32 @@ export class LivestockInventoryService {
   // ==================== INVENTORY TRANSACTIONS ====================
 
   async addTransaction(data: Partial<ILivestockInventory> & { farmId: string; userId: string }): Promise<ILivestockInventory> {
-    const transaction = await LivestockInventory.create({
-      ...data,
-      farmId: new Types.ObjectId(data.farmId),
-      recordedBy: new Types.ObjectId(data.userId),
-      livestockId: data.livestockId ? new Types.ObjectId(data.livestockId as string) : undefined
-    });
+    const { farmId, userId, livestockId, ...rest } = data as any;
+
+    const payload: any = {
+      ...rest,
+      farmId: new Types.ObjectId(farmId),
+      owner: new Types.ObjectId(userId),
+      livestockId: livestockId ? new Types.ObjectId(livestockId as string) : undefined
+    };
+
+    // Defensive: compute totalAmount if not provided but we have unitPrice + quantity
+    if (
+      (payload.transactionType === 'purchase' || payload.transactionType === 'sale') &&
+      payload.totalAmount == null &&
+      payload.unitPrice != null &&
+      payload.quantity != null
+    ) {
+      payload.totalAmount = Number(payload.unitPrice) * Number(payload.quantity);
+    }
+
+    const transaction = await LivestockInventory.create(payload);
 
     // Update livestock status based on transaction type
-    if (data.livestockId) {
-      if (data.transactionType === 'sale' || data.transactionType === 'death') {
-        await Livestock.findByIdAndUpdate(data.livestockId, {
-          isActive: false,
-          status: data.transactionType === 'death' ? 'deceased' : 'sold'
+    if (payload.livestockId) {
+      if (payload.transactionType === 'sale' || payload.transactionType === 'death') {
+        await Livestock.findByIdAndUpdate(payload.livestockId, {
+          status: payload.transactionType === 'death' ? 'deceased' : 'sold'
         });
       }
     }
@@ -79,16 +92,21 @@ export class LivestockInventoryService {
           $group: {
             _id: '$transactionType',
             count: { $sum: '$quantity' },
-            totalValue: { $sum: '$totalValue' }
+            totalAmount: { $sum: { $ifNull: ['$totalAmount', 0] } }
           }
         }
       ]),
       Livestock.aggregate([
-        { $match: { farmId: farmObjectId, isActive: true } },
+        {
+          $match: {
+            farmId: farmObjectId,
+            status: { $nin: ['sold', 'deceased'] }
+          }
+        },
         {
           $group: {
             _id: '$species',
-            count: { $sum: { $cond: [{ $eq: ['$trackingType', 'batch'] }, '$quantity', 1] } }
+            count: { $sum: { $cond: [{ $eq: ['$trackingType', 'batch'] }, { $ifNull: ['$quantity', 1] }, 1] } }
           }
         }
       ])
@@ -96,7 +114,7 @@ export class LivestockInventoryService {
 
     const byType: Record<string, { count: number; value: number }> = {};
     transactions.forEach((t: any) => {
-      byType[t._id] = { count: t.count, value: t.totalValue || 0 };
+      byType[t._id] = { count: t.count, value: t.totalAmount || 0 };
     });
 
     const purchases = byType['purchase']?.count || 0;
@@ -164,13 +182,31 @@ export class LivestockInventoryService {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const [deaths, totalLivestock, byCause, bySpecies, byMonth] = await Promise.all([
-      LivestockInventory.countDocuments({
-        farmId: farmObjectId,
-        transactionType: 'death',
-        transactionDate: { $gte: startDate }
-      }),
-      Livestock.countDocuments({ farmId: farmObjectId }),
+    const [totalDeathsAgg, totalLivestockAgg, byCause, bySpeciesDeaths, byMonth, livestockBySpecies] = await Promise.all([
+      LivestockInventory.aggregate([
+        {
+          $match: {
+            farmId: farmObjectId,
+            transactionType: 'death',
+            transactionDate: { $gte: startDate }
+          }
+        },
+        { $group: { _id: null, total: { $sum: '$quantity' } } }
+      ]),
+      Livestock.aggregate([
+        {
+          $match: {
+            farmId: farmObjectId,
+            status: { $nin: ['sold', 'deceased'] }
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            count: { $sum: { $cond: [{ $eq: ['$trackingType', 'batch'] }, { $ifNull: ['$quantity', 1] }, 1] } }
+          }
+        }
+      ]),
       LivestockInventory.aggregate([
         {
           $match: {
@@ -181,7 +217,7 @@ export class LivestockInventoryService {
         },
         {
           $group: {
-            _id: '$deathCause',
+            _id: '$causeOfDeath',
             count: { $sum: '$quantity' }
           }
         },
@@ -217,11 +253,34 @@ export class LivestockInventoryService {
           }
         },
         { $sort: { _id: 1 } }
+      ]),
+      Livestock.aggregate([
+        {
+          $match: {
+            farmId: farmObjectId,
+            status: { $nin: ['sold', 'deceased'] }
+          }
+        },
+        {
+          $group: {
+            _id: '$species',
+            count: { $sum: { $cond: [{ $eq: ['$trackingType', 'batch'] }, { $ifNull: ['$quantity', 1] }, 1] } }
+          }
+        }
       ])
     ]);
 
-    const totalDeaths = deaths;
-    const mortalityRate = totalLivestock > 0 ? (totalDeaths / (totalLivestock + totalDeaths)) * 100 : 0;
+    const totalDeaths = totalDeathsAgg?.[0]?.total || 0;
+    const totalLivestock = totalLivestockAgg?.[0]?.count || 0;
+
+    const mortalityRate = totalLivestock > 0
+      ? (totalDeaths / (totalLivestock + totalDeaths)) * 100
+      : 0;
+
+    const livestockCountBySpecies: Record<string, number> = {};
+    livestockBySpecies.forEach((s: any) => {
+      livestockCountBySpecies[s._id] = s.count || 0;
+    });
 
     return {
       totalDeaths,
@@ -231,11 +290,16 @@ export class LivestockInventoryService {
         count: c.count,
         percentage: totalDeaths > 0 ? Math.round((c.count / totalDeaths) * 100) : 0
       })),
-      bySpecies: bySpecies.map((s: any) => ({
-        species: s._id,
-        deaths: s.deaths,
-        rate: 0 // Would need species count to calculate
-      })),
+      bySpecies: bySpeciesDeaths.map((s: any) => {
+        const alive = livestockCountBySpecies[s._id] || 0;
+        const deaths = s.deaths || 0;
+        const rate = alive + deaths > 0 ? (deaths / (alive + deaths)) * 100 : 0;
+        return {
+          species: s._id,
+          deaths,
+          rate: Math.round(rate * 100) / 100
+        };
+      }),
       byMonth: byMonth.map((m: any) => ({
         month: m._id,
         deaths: m.deaths
@@ -244,7 +308,7 @@ export class LivestockInventoryService {
   }
 
   async getFinancialSummary(farmId: string, year?: number): Promise<{
-    year: number;
+    year: number | null;
     totalRevenue: number;
     totalExpenses: number;
     netProfit: number;
@@ -252,25 +316,28 @@ export class LivestockInventoryService {
     bySpecies: { species: string; revenue: number; expenses: number; profit: number }[];
   }> {
     const farmObjectId = new Types.ObjectId(farmId);
-    const targetYear = year || new Date().getFullYear();
-    const startDate = new Date(targetYear, 0, 1);
-    const endDate = new Date(targetYear, 11, 31, 23, 59, 59);
+
+    const match: any = {
+      farmId: farmObjectId,
+      transactionType: { $in: ['purchase', 'sale'] }
+    };
+
+    // If year is provided, filter to that year; otherwise return all-time totals.
+    if (year) {
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31, 23, 59, 59);
+      match.transactionDate = { $gte: startDate, $lte: endDate };
+    }
 
     const transactions = await LivestockInventory.aggregate([
-      {
-        $match: {
-          farmId: farmObjectId,
-          transactionDate: { $gte: startDate, $lte: endDate },
-          transactionType: { $in: ['purchase', 'sale'] }
-        }
-      },
+      { $match: match },
       {
         $group: {
           _id: {
             month: { $dateToString: { format: '%Y-%m', date: '$transactionDate' } },
             type: '$transactionType'
           },
-          total: { $sum: '$totalValue' }
+          total: { $sum: { $ifNull: ['$totalAmount', 0] } }
         }
       }
     ]);
@@ -293,16 +360,18 @@ export class LivestockInventoryService {
     });
 
     return {
-      year: targetYear,
+      year: year || null,
       totalRevenue,
       totalExpenses,
       netProfit: totalRevenue - totalExpenses,
-      byMonth: Object.entries(byMonth).map(([month, data]) => ({
-        month,
-        revenue: data.revenue,
-        expenses: data.expenses,
-        profit: data.revenue - data.expenses
-      })).sort((a, b) => a.month.localeCompare(b.month)),
+      byMonth: Object.entries(byMonth)
+        .map(([month, data]) => ({
+          month,
+          revenue: data.revenue,
+          expenses: data.expenses,
+          profit: data.revenue - data.expenses
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month)),
       bySpecies: [] // Would need additional aggregation
     };
   }

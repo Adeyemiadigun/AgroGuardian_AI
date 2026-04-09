@@ -57,6 +57,7 @@ export interface ICropDiagnosis extends Document {
 export interface IChatMessage {
     role: "user" | "assistant";
     content: string;
+    reasoning_details?: any;
     timestamp: Date;
 }
 
