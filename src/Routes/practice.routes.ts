@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   createCropSeasonController,
   logActivityController,
+  completeActivityController,
   getFarmActivitiesController,
   getFarmCropSeasonsController,
   addCropController,
@@ -25,7 +26,13 @@ router.post("/farms/:farmId/crops", validate(addCropSchema), addCropController a
 router.get("/farms/:farmId/crops", getFarmCropsController as any);
 router.post("/farms/:farmId/seasons", validate(createCropSeasonSchema), createCropSeasonController as any);
 router.get("/farms/:farmId/seasons", getFarmCropSeasonsController as any);
+
+// Phase 1: Start
 router.post("/activities", upload.single("image"), validate(logPracticeActivitySchema), logActivityController as any);
+
+// Phase 2: Complete
+router.post("/activities/:activityId/complete", upload.single("image"), completeActivityController as any);
+
 router.get("/farms/:farmId/activities", getFarmActivitiesController as any);
 
 export default router;

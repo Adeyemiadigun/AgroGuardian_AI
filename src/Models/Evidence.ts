@@ -19,6 +19,17 @@ const EvidenceSchema = new Schema<IEvidence>({
   description: {
     type: String,
   },
+  evidenceType: {
+    type: String,
+    enum: ["start", "end"],
+    required: true,
+  },
+  exifData: {
+    latitude: Number,
+    longitude: Number,
+    takenAt: Date,
+    cameraModel: String,
+  },
   uploadedAt: {
     type: Date,
     default: Date.now,

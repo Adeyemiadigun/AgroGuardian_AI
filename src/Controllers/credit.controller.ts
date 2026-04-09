@@ -4,6 +4,8 @@ import {
   generateCreditsForFarm,
   getFarmCredits,
   getAllUserCredits,
+  getFarmerMonthlySummary,
+  getFarmMonthlySummary,
 } from "../Services/credit.service";
 import logger from "../Utils/logger";
 
@@ -69,6 +71,45 @@ export const getUserCreditsController = async (req: AuthRequest, res: Response):
     res.status(400).json({
       success: false,
       message: error.message || "Failed to get user credits",
+    });
+  }
+};
+
+export const getFarmerSummaryController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId as string;
+    const { status } = req.query;
+
+    const summary = await getFarmerMonthlySummary(userId, status as string);
+    res.status(200).json({
+      success: true,
+      message: "Farmer monthly credit summary retrieved",
+      data: summary,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get summary",
+    });
+  }
+};
+
+export const getFarmSummaryController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId as string;
+    const { farmId } = req.params;
+    const { status } = req.query;
+
+    const summary = await getFarmMonthlySummary(farmId, userId, status as string);
+    res.status(200).json({
+      success: true,
+      message: "Farm monthly credit summary retrieved",
+      data: summary,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get farm summary",
     });
   }
 };

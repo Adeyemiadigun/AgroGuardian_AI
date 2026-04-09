@@ -4,10 +4,6 @@ import logger from './logger';
 // =============================================================================
 // OpenRouter Configuration
 // =============================================================================
-// Using OpenRouter for access to multiple AI models with a single API
-// Sign up at https://openrouter.ai to get your API key
-// =============================================================================
-
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 
 const api = new OpenAI({
@@ -54,214 +50,115 @@ export const getChatModelName = (): string => {
   return CHAT_MODEL;
 };
 
-const REASONING_ENABLED = String(process.env.AI_REASONING_ENABLED || '').toLowerCase() === 'true';
-
-const withReasoning = (payload: any) => {
-  if (!REASONING_ENABLED) return payload;
-  return { ...payload, reasoning: { enabled: true } };
-};
-
-const shouldAttemptFallback = (error: any): boolean => {
-  const status = error?.status;
-  const code = error?.code;
-  // OpenRouter often returns 404 for unavailable models: "No endpoints found for <model>"
-  // 402 may happen when credits are insufficient for a given model/max_tokens; try cheaper fallbacks.
-  return status === 402 || status === 404 || status === 429 || status === 503 || code === 'model_not_found';
-};
-
-const getHeader = (headers: any, name: string): string | undefined => {
-  if (!headers) return undefined;
-  const key = String(name || '').toLowerCase();
-  for (const k of Object.keys(headers)) {
-    if (String(k).toLowerCase() === key) return headers[k];
-  }
-  return undefined;
-};
-
-const summarizeLlmError = (error: any) => {
-  const headers = error?.headers || error?.response?.headers;
-
-  const requestId =
-    getHeader(headers, 'x-request-id') ||
-    getHeader(headers, 'x-requestid') ||
-    getHeader(headers, 'cf-ray');
-
-  const retryAfter = getHeader(headers, 'retry-after');
-
-  const rateLimit = {
-    limit: getHeader(headers, 'x-ratelimit-limit') || getHeader(headers, 'x-ratelimit-limit-requests'),
-    remaining: getHeader(headers, 'x-ratelimit-remaining') || getHeader(headers, 'x-ratelimit-remaining-requests'),
-    reset: getHeader(headers, 'x-ratelimit-reset') || getHeader(headers, 'x-ratelimit-reset-requests'),
-  };
-
-  const providerMessage =
-    error?.error?.message ||
-    error?.response?.data?.error?.message ||
-    error?.response?.data?.message;
-
-  const providerMetadata = error?.error?.metadata || error?.response?.data?.error?.metadata;
-
-  return {
-    status: error?.status,
-    code: error?.code,
-    type: error?.type,
-    message: error?.message,
-    providerMessage,
-    providerMetadata,
-    requestId,
-    retryAfter,
-    rateLimit,
-  };
-};
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const RETRY_MAX = Number(process.env.AI_RETRY_MAX || 2);
-const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 500);
-
-// If a primary model is consistently rate-limited upstream (429), skip it briefly.
-const PRIMARY_COOLDOWN_MS = Number(process.env.AI_PRIMARY_COOLDOWN_MS || 30_000);
-const primaryCooldownUntil = new Map<string, number>();
-
-const LOG_LLM_USAGE = String(process.env.AI_LOG_LLM_USAGE || '').toLowerCase() === 'true';
-const summarizeUsage = (usage: any) => {
-  if (!usage) return undefined;
-  return {
-    promptTokens: usage.prompt_tokens ?? usage.promptTokens,
-    completionTokens: usage.completion_tokens ?? usage.completionTokens,
-    totalTokens: usage.total_tokens ?? usage.totalTokens,
-    reasoningTokens: usage.reasoning_tokens ?? usage.reasoningTokens,
-  };
-};
-const logUsage = (model: string, result: any) => {
-  if (!LOG_LLM_USAGE) return;
-  const u = summarizeUsage(result?.usage);
-  if (!u) return;
-  logger.debug('LLM usage', { model, ...u });
-};
-
 // Helper to call API with automatic fallback
 const callWithFallback = async (
   createCall: (model: string) => Promise<any>,
   primaryModel: string
 ): Promise<any> => {
-  // Circuit breaker: if primary is cooling down, skip straight to fallbacks
-  const cooldown = primaryCooldownUntil.get(primaryModel);
-  if (cooldown && Date.now() < cooldown) {
-    logger.warn('Primary model in cooldown; skipping to fallbacks', {
-      primaryModel,
-      cooldownMsRemaining: cooldown - Date.now(),
-      fallbacks: FALLBACK_MODELS,
-    });
-
-    let lastErr: any;
-    for (const fallbackModel of FALLBACK_MODELS) {
-      if (!fallbackModel || fallbackModel === primaryModel) continue;
-      try {
-        const res = await createCall(fallbackModel);
-        logUsage(fallbackModel, res);
-        return res;
-      } catch (e: any) {
-        lastErr = e;
-        const s2 = summarizeLlmError(e);
-        logger.warn('Fallback model failed during cooldown; trying next', { primaryModel, fallbackModel, ...s2 });
-        continue;
-      }
+  try {
+    return await createCall(primaryModel);
+  } catch (error: any) {
+    // If rate limited or model unavailable, try fallback
+    if (error?.status === 429 || error?.status === 503 || error?.code === 'model_not_found') {
+      logger.warn(`Primary model ${primaryModel} failed, trying fallback ${FALLBACK_MODEL}`);
+      return await createCall(FALLBACK_MODEL);
     }
-    throw lastErr;
+    throw error;
   }
+};
 
-  // Retry primary on transient throttling before falling back
-  for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
-    try {
-      const res = await createCall(primaryModel);
-      logUsage(primaryModel, res);
-      return res;
-    } catch (error: any) {
-      const summary = summarizeLlmError(error);
-      const status = error?.status;
+const COMPARISON_PROMPT = `You are a strict agricultural auditor. You are comparing two photos of the same farm location: one taken at the START of a regenerative practice and one taken at the END.
 
-      const upstreamRaw = String((summary as any)?.providerMetadata?.raw || '').toLowerCase();
-      if ((status === 429 || status === 503) && upstreamRaw.includes('rate-limit')) {
-        primaryCooldownUntil.set(primaryModel, Date.now() + PRIMARY_COOLDOWN_MS);
-      }
+Practice being verified: {practiceName}
 
-      const retryAfterSec = summary?.retryAfter ? Number(summary.retryAfter) : NaN;
-      const waitMs = Number.isFinite(retryAfterSec)
-        ? Math.max(0, retryAfterSec * 1000)
-        : Math.min(8000, RETRY_BASE_MS * Math.pow(2, attempt));
+Tasks:
+1. LANDMARK CHECK: Compare background elements (trees, buildings, hills, fence lines). Are these definitely photos of the same physical spot?
+2. PROGRESS CHECK: Does the second photo show clear evidence that the practice has been implemented compared to the first? (e.g., if 'Mulching', is there now mulch cover?)
+3. AUTHENTICITY: Does either photo look like a stock image or manipulated?
 
-      // Only retry on transient throttling/capacity
-      const retryable = status === 429 || status === 503;
-      const isLastAttempt = attempt >= RETRY_MAX;
+Return ONLY a JSON response:
+{
+  "isVerified": true | false,
+  "confidence": 0-100,
+  "landmarkMatch": true | false,
+  "observations": "Detailed description of changes observed",
+  "reasoning": "Why you reached this conclusion"
+}
 
-      if (retryable && !isLastAttempt) {
-        logger.warn('LLM primary model throttled; retrying', {
-          primaryModel,
-          attempt: attempt + 1,
-          waitMs,
-          ...summary,
-        });
-        await sleep(waitMs + Math.floor(Math.random() * 250));
-        continue;
-      }
+IMPORTANT: Be very strict. If it's not clearly the same location or if the practice evidence is weak, mark isVerified as false.`;
 
-      // If not fallbackable (e.g. 401), stop here
-      if (!shouldAttemptFallback(error) || FALLBACK_MODELS.length === 0) {
-        logger.error('LLM request failed (no fallback attempted)', { primaryModel, ...summary });
-        throw error;
-      }
-
-      logger.warn('Primary model failed; trying fallbacks', {
-        primaryModel,
-        fallbacks: FALLBACK_MODELS,
-        ...summary,
-      });
-
-      let lastErr: any = error;
-
-      for (const fallbackModel of FALLBACK_MODELS) {
-        if (!fallbackModel || fallbackModel === primaryModel) continue;
-
-        try {
-          const res = await createCall(fallbackModel);
-          logUsage(fallbackModel, res);
-          return res;
-        } catch (e: any) {
-          lastErr = e;
-          const s2 = summarizeLlmError(e);
-
-          if (shouldAttemptFallback(e)) {
-            logger.warn('Fallback model failed; trying next', {
-              primaryModel,
-              fallbackModel,
-              ...s2,
-            });
-            continue;
-          }
-
-          logger.error('Fallback model failed (non-fallbackable error)', {
-            primaryModel,
-            fallbackModel,
-            ...s2,
-          });
-          throw e;
-        }
-      }
-
-      logger.error('All fallback models failed', {
-        primaryModel,
-        fallbacks: FALLBACK_MODELS,
-        ...summarizeLlmError(lastErr),
-      });
-
-      throw lastErr;
-    }
+const extractJSON = (text: string): any => {
+  try { return JSON.parse(text); } catch {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (objectMatch) return JSON.parse(objectMatch[0]);
+    throw new Error('No valid JSON found in response');
   }
+};
 
-  // Should be unreachable
-  const res = await createCall(primaryModel);
-  logUsage(primaryModel, res);
-  return res;
+export const verifyPracticeImage = async (
+  imageBase64: string,
+  practiceName: string
+): Promise<any> => {
+  const prompt = `You are an expert agricultural auditor. Analyze this photo taken at the START of the practice: "${practiceName}". Does it show a valid starting point for this activity?
+  
+  Return ONLY JSON:
+  {
+    "isVerified": true | false,
+    "confidence": 0-100,
+    "observations": "What you see",
+    "reasoning": "Conclusion"
+  }`;
+  
+  const result = await callWithFallback(
+    (model) => api.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'You are an agricultural verification assistant. Always respond with valid JSON only.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${imageBase64}` } },
+          ],
+        },
+      ],
+    } as any),
+    VISION_MODEL
+  );
+  
+  return extractJSON(result.choices[0].message.content || '{}');
+};
+
+export const comparePracticeImages = async (
+  startImageUrl: string,
+  endImageUrl: string,
+  practiceName: string
+): Promise<any> => {
+  const prompt = COMPARISON_PROMPT.replace('{practiceName}', practiceName);
+
+  const result = await callWithFallback(
+    (model) => api.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: 'You are a strict agricultural auditor. Always respond with valid JSON only.' },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: prompt },
+            { type: 'text', text: "START PHOTO:" },
+            { type: 'image_url', image_url: { url: startImageUrl } },
+            { type: 'text', text: "END PHOTO:" },
+            { type: 'image_url', image_url: { url: endImageUrl } },
+          ],
+        },
+      ],
+    } as any),
+    VISION_MODEL
+  );
+
+  return extractJSON(result.choices[0].message.content || '{}');
 };
 
 const DIAGNOSIS_PROMPT = `You are an expert agricultural plant pathologist and entomologist AI for AgroGuardian AI, specializing in crop disease detection and pest management for African and tropical crops.
@@ -324,26 +221,6 @@ Rules:
 - Be specific with dosages, product names (where applicable), timing, and safety equipment needed.
 
 IMPORTANT: Return ONLY valid JSON. No markdown code blocks, no backticks, no extra text before or after the JSON.`;
-
-// Helper to extract JSON from response (handles markdown code blocks)
-const extractJSON = (text: string): any => {
-  // Try direct parse first
-  try {
-    return JSON.parse(text);
-  } catch {
-    // Try to extract from markdown code block
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[1].trim());
-    }
-    // Try to find JSON object in text
-    const objectMatch = text.match(/\{[\s\S]*\}/);
-    if (objectMatch) {
-      return JSON.parse(objectMatch[0]);
-    }
-    throw new Error('No valid JSON found in response');
-  }
-};
 
 export const analyzeCropImage = async (
   imageUrls: string[],
@@ -432,7 +309,6 @@ export const verifyPracticeImage = async (
   const result = await callWithFallback(
     (model) => api.chat.completions.create({
       model,
-      max_tokens: VISION_MAX_TOKENS,
       messages: [
         { role: 'system', content: 'You are an agricultural verification assistant. Always respond with valid JSON only.' },
         {
