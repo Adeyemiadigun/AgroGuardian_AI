@@ -704,17 +704,25 @@ export const logPracticeActivity = async (
       
       logger.info(`Start evidence uploaded for activity ${activityLog._id}`);
 
-      // Pass the raw buffer for EXIF extraction
-      verifyActivityEvidence(evidence._id.toString(), imageBuffer).catch(err => 
-        logger.error("AI Verification trigger failed:", err)
-      );
+      // Pass the raw buffer for EXIF extraction (Now awaiting to return result to frontend)
+      try {
+        await verifyActivityEvidence(evidence._id.toString(), imageBuffer);
+      } catch (err) {
+        logger.error("AI Verification trigger failed:", err);
+      }
+
+      // Re-fetch to get updated status and description
+      const updatedLog = await PracticeActivityLog.findById(activityLog._id);
+      const updatedEvidence = await Evidence.findById(evidence._id);
+
+      return { activity: updatedLog, evidence: updatedEvidence };
 
     } catch (err) {
       logger.error("Start evidence upload failed:", err);
     }
   }
   
-  return activityLog;
+  return { activity: activityLog };
 };
 
 /**
@@ -808,13 +816,18 @@ export const completePracticeActivity = async (
 
     logger.info(`Completion evidence uploaded for activity ${activityLog._id}`);
 
-    // Trigger AI Verification for the END photo
-    // This will trigger carbon calculation inside verifyActivityEvidence if end photo is valid
-    verifyActivityEvidence(evidence._id.toString(), imageBuffer).catch(err => 
-      logger.error("AI Verification trigger failed for completion:", err)
-    );
+    // Trigger AI Verification for the END photo (Now awaiting to return result to frontend)
+    try {
+      await verifyActivityEvidence(evidence._id.toString(), imageBuffer);
+    } catch (err) {
+      logger.error("AI Verification trigger failed for completion:", err);
+    }
 
-    return activityLog;
+    // Re-fetch to get updated status and description
+    const updatedLog = await PracticeActivityLog.findById(activityLog._id);
+    const updatedEvidence = await Evidence.findById(evidence._id);
+
+    return { activity: updatedLog, evidence: updatedEvidence };
   } catch (err: any) {
     logger.error("Completion evidence upload failed:", err);
     throw new Error(`Failed to complete activity: ${err.message}`);

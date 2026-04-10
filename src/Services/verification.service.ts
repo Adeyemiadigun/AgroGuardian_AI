@@ -6,7 +6,7 @@ import { verifyPracticeImage, comparePracticeImages } from "../Utils/openaiClien
 import logger from "../Utils/logger";
 import { calculateCarbonForActivity } from "./carbon.service";
 import { backfillAccrualForPracticeLog } from "./carbon-accrual.service";
-import * as ExifParser from "exif-parser";
+// import * as ExifParser from "exif-parser"; // Commented out for later implementation
 
 /**
  * Strict Verification Service
@@ -27,10 +27,11 @@ export const verifyActivityEvidence = async (evidenceId: string, imageBuffer: Bu
     const farm = await Farm.findById(log.farmId);
     if (!farm) throw new Error("Farm not found");
 
-    // 1. EXTRACT EXIF METADATA
+    /* 1. EXTRACT EXIF METADATA (Commented out for later implementation)
     try {
       const parser = ExifParser.create(imageBuffer);
       const result = parser.parse();
+      ...
       
       if (result.tags) {
         const exifData: any = {
@@ -83,6 +84,7 @@ export const verifyActivityEvidence = async (evidenceId: string, imageBuffer: Bu
     } catch (exifErr) {
       logger.error("EXIF Parsing failed:", exifErr);
     }
+    */
 
     // 4. AI VISUAL VERIFICATION
     let aiResult;

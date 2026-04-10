@@ -142,7 +142,7 @@ export const logActivityController = async (req: AuthRequest, res: Response): Pr
   try {
     const userId = req.user!.userId as string;
 
-    const activity = await logPracticeActivity(
+    const result = await logPracticeActivity(
       userId, 
       {
         ...req.body,
@@ -154,8 +154,9 @@ export const logActivityController = async (req: AuthRequest, res: Response): Pr
     logger.info("Practice activity logged (Start)", { farmId: req.body.farmId, userId });
     res.status(201).json({
       success: true,
-      message: "Practice activity initiated successfully. Upload completion evidence later.",
-      data: activity,
+      message: "Practice activity initiated successfully. AI verification results included if evidence provided.",
+      data: result.activity,
+      evidence: result.evidence,
     });
   } catch (error: any) {
     logger.error("Error logging activity", error);
@@ -180,7 +181,7 @@ export const completeActivityController = async (req: AuthRequest, res: Response
       return;
     }
 
-    const activity = await completePracticeActivity(
+    const result = await completePracticeActivity(
       userId,
       activityId as string,
       file.buffer,
@@ -190,8 +191,9 @@ export const completeActivityController = async (req: AuthRequest, res: Response
     logger.info("Practice activity completion evidence uploaded", { activityId, userId });
     res.status(200).json({
       success: true,
-      message: "Completion evidence uploaded successfully. AI verification in progress.",
-      data: activity,
+      message: "Completion evidence uploaded and AI verification completed.",
+      data: result.activity,
+      evidence: result.evidence,
     });
   } catch (error: any) {
     logger.error("Error completing activity", error);
