@@ -177,6 +177,20 @@ export const updateFarm = async (farmId: string, ownerId: string, data: UpdateFa
     return farm;
 }
 
+export const decommissionFarm = async (farmId: string, ownerId: string) => {
+    const farm = await Farm.findOneAndUpdate(
+        { _id: farmId, owner: ownerId },
+        { $set: { status: "inactive" } },
+        { new: true }
+    );
+    if (!farm) {
+        logger.warn(`Farm not found for decommissioning: Farm ID ${farmId} for user ${ownerId}`);
+        throw new Error("Farm not found");
+    }
+    logger.info(`Farm decommissioned: ${farm.name} for user ${ownerId}`);
+    return { message: "Farm decommissioned successfully", data: farm };
+}
+
 export const deleteFarm = async (farmId: string, ownerId: string) => {
     const farm = await Farm.findOneAndDelete({ _id: farmId, owner: ownerId });
     if(!farm){

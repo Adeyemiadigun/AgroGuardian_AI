@@ -97,6 +97,19 @@ export const createLivestock = async (
 
   // Create inventory record for purchase/birth
   if (data.acquisitionMethod === "purchase" || data.acquisitionMethod === "birth") {
+    const qty = data.trackingType === 'batch' ? Number(data.quantity || 0) : 1;
+    const safeQty = Number.isFinite(qty) && qty > 0 ? qty : 1;
+
+    // For batch livestock, acquisitionCost is treated as TOTAL paid for the whole batch.
+    // We store unitPrice for convenience (per-animal) and totalAmount as the total paid.
+    const totalAmount =
+      data.acquisitionMethod === "birth" ? 0 : (data.acquisitionCost ?? undefined);
+
+    const unitPrice =
+      data.acquisitionMethod === "birth"
+        ? 0
+        : (totalAmount != null ? Number(totalAmount) / safeQty : undefined);
+
     await LivestockInventory.create({
       farmId: data.farmId,
       owner: userId,
@@ -104,8 +117,8 @@ export const createLivestock = async (
       transactionType: data.acquisitionMethod,
       species: data.species,
       quantity: data.quantity || 1,
-      unitPrice: data.acquisitionCost,
-      totalAmount: data.acquisitionCost ? data.acquisitionCost * (data.quantity || 1) : undefined,
+      unitPrice,
+      totalAmount,
       transactionDate: data.acquisitionDate ? new Date(data.acquisitionDate) : new Date(),
       notes: `Initial ${data.acquisitionMethod} record`
     });
@@ -270,7 +283,7 @@ export const getLivestockStats = async (farmId: string, userId: string) => {
         activeCount: {
           $sum: {
             $cond: [
-              { $and: [{ $eq: ["$status", "active"] }] },
+              { $in: ["$status", ["active", "breeding"]] },
               { $cond: [{ $eq: ["$trackingType", "batch"] }, "$quantity", 1] },
               0
             ]
@@ -304,29 +317,99 @@ export const getLivestockStats = async (farmId: string, userId: string) => {
     .limit(10);
 
   // Total value (from acquisition costs)
+  // Note: For batch livestock, `cost` / `acquisitionCost` are treated as TOTAL values for the batch.
   const totalValue = await Livestock.aggregate([
-    { $match: { farmId: farmObjectId, owner: new mongoose.Types.ObjectId(userId), status: "active" } },
+    { $match: { farmId: farmObjectId, owner: new mongoose.Types.ObjectId(userId), status: { $in: ["active", "breeding"] } } },
+
     {
       $group: {
         _id: null,
         totalValue: {
           $sum: {
-            $multiply: [
-              { $ifNull: ["$acquisitionCost", 0] },
-              { $cond: [{ $eq: ["$trackingType", "batch"] }, "$quantity", 1] }
-            ]
+            $ifNull: ["$cost", { $ifNull: ["$acquisitionCost", 0] }]
           }
         }
       }
     }
   ]);
 
+  // Weighing frequency (how often animals/groups are weighed)
+  const now = new Date();
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const windowDays = 30;
+  const windowStart = new Date(now.getTime() - windowDays * MS_PER_DAY);
+  const intervalWindowDays = 90;
+  const intervalWindowStart = new Date(now.getTime() - intervalWindowDays * MS_PER_DAY);
+
+  const livestockForWeighing = await Livestock.find({
+    farmId: farmObjectId,
+    owner: new mongoose.Types.ObjectId(userId),
+    status: { $in: ['active', 'breeding'] }
+  })
+    .select('trackingType quantity weightHistory.recordedAt')
+    .lean();
+
+  const effectiveCount = (l: any) => (l?.trackingType === 'batch' ? Number(l?.quantity || 0) : 1);
+
+  const totalActiveAnimals = livestockForWeighing.reduce((sum: number, l: any) => sum + effectiveCount(l), 0);
+
+  let weighInsLast30Days = 0;
+  let animalsWeighedLast30Days = 0;
+  let lastWeighInAt: Date | null = null;
+
+  const intervalDays: number[] = [];
+
+  for (const l of livestockForWeighing) {
+    const dates: Date[] = (l.weightHistory || [])
+      .map((w: any) => (w?.recordedAt ? new Date(w.recordedAt) : null))
+      .filter((d: Date | null): d is Date => !!d && !Number.isNaN(d.getTime()))
+      .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+
+    if (dates.length) {
+      const last = dates[dates.length - 1];
+      if (!lastWeighInAt || last.getTime() > lastWeighInAt.getTime()) lastWeighInAt = last;
+    }
+
+    const inLast30 = dates.filter((d: Date) => d.getTime() >= windowStart.getTime());
+    weighInsLast30Days += inLast30.length;
+    if (inLast30.length > 0) {
+      animalsWeighedLast30Days += effectiveCount(l);
+    }
+
+    const recentForIntervals = dates.filter((d: Date) => d.getTime() >= intervalWindowStart.getTime()).slice(-10);
+    for (let i = 1; i < recentForIntervals.length; i++) {
+      intervalDays.push((recentForIntervals[i].getTime() - recentForIntervals[i - 1].getTime()) / MS_PER_DAY);
+    }
+  }
+
+  const avgDaysBetweenWeighIns = intervalDays.length
+    ? intervalDays.reduce((sum, v) => sum + v, 0) / intervalDays.length
+    : null;
+
+  const daysSinceLastWeighIn = lastWeighInAt
+    ? Math.floor((now.getTime() - lastWeighInAt.getTime()) / MS_PER_DAY)
+    : null;
+
+  const avgWeighInsPerAnimalLast30Days = totalActiveAnimals > 0
+    ? weighInsLast30Days / totalActiveAnimals
+    : 0;
+
   return {
     bySpecies: stats,
     totalAnimals: stats.reduce((sum, s) => sum + s.totalCount, 0),
     totalSick: stats.reduce((sum, s) => sum + s.sickCount, 0),
     upcomingVaccinations,
-    estimatedValue: totalValue[0]?.totalValue || 0
+    estimatedValue: totalValue[0]?.totalValue || 0,
+    weighing: {
+      windowDays,
+      totalActiveAnimals,
+      weighInsLast30Days,
+      animalsWeighedLast30Days,
+      avgWeighInsPerAnimalLast30Days,
+      avgDaysBetweenWeighIns,
+      daysSinceLastWeighIn,
+      lastWeighInAt
+    }
   };
 };
 
@@ -343,7 +426,7 @@ export const getAllUserLivestock = async (userId: string) => {
 export const getLivestockDashboardSummary = async (userId: string) => {
   const ownerId = new mongoose.Types.ObjectId(userId);
 
-  const baseMatch = { owner: ownerId, status: 'active' };
+  const baseMatch = { owner: ownerId, status: { $in: ['active', 'breeding'] } };
 
   const [overall] = await Livestock.aggregate([
     { $match: baseMatch },

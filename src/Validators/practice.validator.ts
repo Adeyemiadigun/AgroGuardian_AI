@@ -2,12 +2,35 @@ import { z } from "zod";
 
 export const createCropSeasonSchema = z.object({
   cropId: z.string({ error: "Crop ID is required" }),
-  plantedDate: z.string().refine((date) => !isNaN(Date.parse(date)), {
-    message: "Planted date must be a valid date string",
-  }).optional(),
+  plantedDate: z
+    .string()
+    .refine((date) => !isNaN(Date.parse(date)), {
+      message: "Planted date must be a valid date string",
+    })
+    .optional(),
   area: z.coerce.number({ error: "Area is required" }).positive(),
   areaUnit: z.enum(["acres", "hectares"]).optional(),
 });
+
+export const updateCropSeasonSchema = z
+  .object({
+    plantedDate: z
+      .string()
+      .refine((date) => !isNaN(Date.parse(date)), {
+        message: "Planted date must be a valid date string",
+      })
+      .optional(),
+    area: z.coerce.number().positive().optional(),
+    areaUnit: z.enum(["acres", "hectares"]).optional(),
+    status: z.enum(["active", "harvested", "failed"]).optional(),
+    harvestDate: z
+      .string()
+      .refine((date) => !isNaN(Date.parse(date)), {
+        message: "Harvest date must be a valid date string",
+      })
+      .optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: "No update fields provided" });
 
 export const logPracticeActivitySchema = z.object({
   farmId: z.string({ error: "Farm ID is required" }),
@@ -43,6 +66,7 @@ export const addCropSchema = z.object({
 });
 
 export type CreateCropSeasonInput = z.infer<typeof createCropSeasonSchema>;
+export type UpdateCropSeasonInput = z.infer<typeof updateCropSeasonSchema>;
 export type AddCropInput = z.infer<typeof addCropSchema>;
 export type LogPracticeActivityInput = z.infer<typeof logPracticeActivitySchema>;
 export type GenerateCreditsInput = z.infer<typeof generateCreditsSchema>;

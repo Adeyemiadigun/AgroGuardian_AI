@@ -9,12 +9,88 @@ export class LivestockInventoryService {
   async addTransaction(data: Partial<ILivestockInventory> & { farmId: string; userId: string }): Promise<ILivestockInventory> {
     const { farmId, userId, livestockId, ...rest } = data as any;
 
+    const httpError = (status: number, message: string) => {
+      const err: any = new Error(message);
+      err.status = status;
+      return err;
+    };
+
     const payload: any = {
       ...rest,
       farmId: new Types.ObjectId(farmId),
       owner: new Types.ObjectId(userId),
       livestockId: livestockId ? new Types.ObjectId(livestockId as string) : undefined
     };
+
+    const qty = Number(payload.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      throw httpError(400, 'Quantity must be a positive number');
+    }
+    payload.quantity = qty;
+
+    const livestock = payload.livestockId
+      ? await Livestock.findById(payload.livestockId).select('farmId owner species trackingType quantity cost status')
+      : null;
+
+    if (payload.livestockId) {
+      if (!livestock) throw httpError(404, 'Livestock not found');
+      if (String((livestock as any).farmId) !== String(payload.farmId)) {
+        throw httpError(403, 'Livestock does not belong to this farm');
+      }
+      if (String((livestock as any).owner) !== String(payload.owner)) {
+        throw httpError(403, 'Not allowed to record transactions for this livestock');
+      }
+
+      // Ensure species matches the selected livestock (avoids mismatches from the client)
+      payload.species = (livestock as any).species;
+    }
+
+    // ===================== Death handling (loss + batch-safe status/quantity) =====================
+    if (payload.transactionType === 'death') {
+      if (!payload.livestockId || !livestock) {
+        throw httpError(400, 'Death transactions require selecting a livestock/batch');
+      }
+
+      // Use estimated selling value (Livestock.cost) as the default loss-per-animal.
+      if (payload.unitPrice == null) {
+        const cost = Number((livestock as any).cost);
+        if (!Number.isFinite(cost)) {
+          throw httpError(400, 'Estimated selling value (cost) is required to record death loss');
+        }
+
+        // For batch livestock, `cost` is stored as TOTAL batch value, so infer per-animal value.
+        if ((livestock as any).trackingType === 'batch') {
+          const currentQty = Number((livestock as any).quantity || 0);
+          if (!Number.isFinite(currentQty) || currentQty <= 0) {
+            throw httpError(400, 'This batch has no remaining quantity to infer per-animal value');
+          }
+          payload.unitPrice = cost / currentQty;
+        } else {
+          payload.unitPrice = cost;
+        }
+      }
+
+      if (payload.totalAmount == null && payload.unitPrice != null && payload.quantity != null) {
+        payload.totalAmount = Number(payload.unitPrice) * Number(payload.quantity);
+      }
+
+      if ((livestock as any).trackingType === 'batch') {
+        const currentQty = Number((livestock as any).quantity || 0);
+        if (!Number.isFinite(currentQty) || currentQty <= 0) {
+          throw httpError(400, 'This batch has no remaining quantity to deduct from');
+        }
+        if (payload.quantity > currentQty) {
+          throw httpError(400, `Death quantity (${payload.quantity}) cannot exceed batch quantity (${currentQty})`);
+        }
+
+        const nextQty = currentQty - payload.quantity;
+        const update: any = { quantity: nextQty };
+        if (nextQty <= 0) update.status = 'deceased';
+        await Livestock.findByIdAndUpdate(payload.livestockId, update);
+      } else {
+        await Livestock.findByIdAndUpdate(payload.livestockId, { status: 'deceased' });
+      }
+    }
 
     // Defensive: compute totalAmount if not provided but we have unitPrice + quantity
     if (
@@ -29,12 +105,10 @@ export class LivestockInventoryService {
     const transaction = await LivestockInventory.create(payload);
 
     // Update livestock status based on transaction type
-    if (payload.livestockId) {
-      if (payload.transactionType === 'sale' || payload.transactionType === 'death') {
-        await Livestock.findByIdAndUpdate(payload.livestockId, {
-          status: payload.transactionType === 'death' ? 'deceased' : 'sold'
-        });
-      }
+    if (payload.livestockId && payload.transactionType === 'sale') {
+      await Livestock.findByIdAndUpdate(payload.livestockId, {
+        status: 'sold'
+      });
     }
 
     return transaction;
@@ -319,7 +393,7 @@ export class LivestockInventoryService {
 
     const match: any = {
       farmId: farmObjectId,
-      transactionType: { $in: ['purchase', 'sale'] }
+      transactionType: { $in: ['purchase', 'sale', 'death'] }
     };
 
     // If year is provided, filter to that year; otherwise return all-time totals.
@@ -353,7 +427,7 @@ export class LivestockInventoryService {
       if (t._id.type === 'sale') {
         byMonth[month].revenue += t.total || 0;
         totalRevenue += t.total || 0;
-      } else if (t._id.type === 'purchase') {
+      } else if (t._id.type === 'purchase' || t._id.type === 'death') {
         byMonth[month].expenses += t.total || 0;
         totalExpenses += t.total || 0;
       }

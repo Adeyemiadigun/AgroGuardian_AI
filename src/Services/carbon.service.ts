@@ -1,5 +1,4 @@
 import CarbonCalculation from "../Models/CarbonCalculations";
-import CarbonCredits from "../Models/CarbonCredits";
 import PracticeActivityLog from "../Models/PracticeActivityLogs";
 import CarbonFactor from "../Models/CarbonFactor";
 import Crop from "../Models/Crop";
@@ -105,25 +104,8 @@ export const calculateCarbonForActivity = async (activityLogId: string) => {
 
     logger.info(`Engine: Successfully calculated ${carbonSequestered.toFixed(4)} tons CO2e for log ${log._id}`);
 
-    // 6. Auto-generate Carbon Credit for this calculation
-    try {
-      const bufferMultiplier = 0.8; // 20% buffer pool holdback
-      const creditsToIssue = carbonSequestered * bufferMultiplier;
-
-      await CarbonCredits.create({
-        farmId: farm._id,
-        creditsEarned: Number(creditsToIssue.toFixed(4)),
-        status: "pending-verification",
-        issuedDate: new Date(),
-        periodStart: log.startDate,
-        periodEnd: log.endDate,
-      });
-
-      logger.info(`Auto-generated ${creditsToIssue.toFixed(4)} carbon credits for farm ${farm._id}`);
-    } catch (creditError: any) {
-      logger.error("Auto credit generation failed:", creditError);
-      // Don't throw - calculation succeeded, credit generation is secondary
-    }
+    // NOTE: Credits are now generated as monthly accrual entries (estimated) and later verified/issued.
+    // We keep CarbonCalculations for auditing, but avoid minting duplicate credit records here.
 
     return calculation;
   } catch (error: any) {

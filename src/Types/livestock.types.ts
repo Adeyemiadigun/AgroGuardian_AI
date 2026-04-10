@@ -78,7 +78,8 @@ export interface ILivestock extends Document {
   dateOfBirth?: Date;
   acquisitionDate: Date;
   acquisitionMethod: "birth" | "purchase" | "gift" | "other";
-  acquisitionCost?: number;
+  acquisitionCost?: number; // amount paid if purchased
+  cost?: number; // expected selling price / current value
   
   // Physical attributes
   weight?: number; // Current weight in kg
@@ -296,27 +297,54 @@ export interface ILivestockFeeding extends Document {
   livestockId?: ILivestock["_id"]; // Can be null for batch feeding
   farmId: IFarm["_id"];
   owner: IUser["_id"];
-  
+
   // What was fed
   feedType: string;
   feedBrand?: string;
   quantity: number;
   unit: "kg" | "lbs" | "bags" | "liters";
-  
+
   // When
   feedingTime: Date;
   scheduleType?: "morning" | "afternoon" | "evening" | "ad_libitum";
-  
+
   // Cost tracking
   costPerUnit?: number;
   totalCost?: number;
-  
+
   // For batch feeding
   batchId?: string;
   animalsCount?: number;
-  
+
   notes?: string;
-  
+
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Feeding schedules (reminders)
+export interface ILivestockFeedingSchedule extends Document {
+  livestockId?: ILivestock["_id"]; // Optional (schedule can be for all animals)
+  farmId: IFarm["_id"];
+  owner: IUser["_id"];
+
+  // When to remind (local to timezone)
+  timesOfDay: string[]; // ["07:00", "16:00"]
+  daysOfWeek?: number[]; // 0 (Sun) .. 6 (Sat). If omitted => every day
+  timezone: string; // IANA TZ e.g. "Africa/Lagos"
+
+  // Optional context
+  scheduleType?: "morning" | "afternoon" | "evening" | "ad_libitum";
+  feedType?: string;
+  feedBrand?: string;
+
+  enabled: boolean;
+
+  // De-dupe reminder spam: store last sent keys like "2026-04-09-07:00"
+  lastReminderKeys?: string[];
+
+  notes?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,6 +1,6 @@
 import { Response } from "express";
 import { AuthRequest } from "../Types/auth.types";
-import {  createFarm,  getFarmsByOwner,  getFarmById,  updateFarm,  deleteFarm,} from "../Services/farm.service";
+import {  createFarm,  getFarmsByOwner,  getFarmById,  updateFarm,  deleteFarm, decommissionFarm,} from "../Services/farm.service";
 import logger from "../Utils/logger";
 import { createFarmSchema } from "../Validators/farm.validator";
 
@@ -93,6 +93,24 @@ export const updateFarmController = async (req: AuthRequest, res: Response): Pro
         res.status(400).json({ 
             success: false, 
             message: error.message || "Failed to update farm" 
+        });
+    }
+}
+
+export const decommissionFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
+    try {
+        const farmId = Array.isArray(req.params.farmId) ? req.params.farmId[0] : req.params.farmId;
+        const userId = req.user!.userId as string;
+        const result = await decommissionFarm(farmId, userId);
+        res.status(200).json({
+            success: true,
+            ...result
+        });
+    } catch (error: any) {
+        logger.error("Error decommissioning farm", error);
+        res.status(400).json({
+            success: false,
+            message: error.message || "Failed to decommission farm"
         });
     }
 }

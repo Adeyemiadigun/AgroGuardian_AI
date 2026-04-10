@@ -123,7 +123,7 @@ class LivestockAlertsService {
     const sickAnimals = await Livestock.find({
       farmId,
       healthStatus: { $in: ['sick', 'critical', 'under_treatment'] },
-      isActive: true
+      status: { $in: ['active', 'breeding'] }
     }).select('name tagId species healthStatus');
 
     return sickAnimals.map((animal: any) => ({

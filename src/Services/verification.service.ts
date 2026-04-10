@@ -1,11 +1,11 @@
 import Evidence from "../Models/Evidence";
 import PracticeActivityLog from "../Models/PracticeActivityLogs";
 import FarmPractice from "../Models/FarmPractice";
-import CarbonCredits from "../Models/CarbonCredits";
 import Farm from "../Models/Farm";
 import { verifyPracticeImage, comparePracticeImages } from "../Utils/openaiClient";
 import logger from "../Utils/logger";
 import { calculateCarbonForActivity } from "./carbon.service";
+import { backfillAccrualForPracticeLog } from "./carbon-accrual.service";
 import * as ExifParser from "exif-parser";
 
 /**
@@ -116,16 +116,16 @@ export const verifyActivityEvidence = async (evidenceId: string, imageBuffer: Bu
           log.status = "completed";
           await log.save();
           
-          // Trigger Carbon Credits Generation
+          // Store a final audit calculation, then mark all monthly accrual credits as verified.
           await calculateCarbonForActivity(log._id.toString());
-          
-          // Update credit status to verified
-          await CarbonCredits.findOneAndUpdate(
-            { farmId: log.farmId, periodStart: log.startDate, periodEnd: log.endDate },
-            { $set: { status: "verified" } }
-          );
-          
-          logger.info(`STRICT_SUCCESS: Activity ${log._id} verified and credits issued.`);
+
+          await backfillAccrualForPracticeLog(log._id.toString(), {
+            targetStatus: "verified",
+            isEstimated: false,
+            endOverride: new Date(log.endDate),
+          });
+
+          logger.info(`STRICT_SUCCESS: Activity ${log._id} verified and accrual credits verified.`);
         } else {
             log.status = "failed";
             log.verificationFlags.push(`AI_END_FAIL: ${aiResult.reasoning || aiResult.observations}`);

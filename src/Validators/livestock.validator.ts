@@ -41,6 +41,7 @@ export const createLivestockSchema = z.object({
   acquisitionDate: z.string().datetime().or(z.string()),
   acquisitionMethod: z.enum(["birth", "purchase", "gift", "other"]).optional(),
   acquisitionCost: z.number().nonnegative().optional(),
+  cost: z.number().nonnegative().optional(),
   
   // Physical
   weight: z.number().positive().optional(),
@@ -71,6 +72,15 @@ export const createLivestockSchema = z.object({
 }, {
   message: "Batch tracking requires a quantity greater than 0",
   path: ["quantity"]
+}).refine((data) => {
+  // Purchase requires purchase amount (but don't break older clients that omit acquisitionMethod)
+  if (data.acquisitionMethod === "purchase" && (data.acquisitionCost == null || Number.isNaN(data.acquisitionCost as any))) {
+    return false;
+  }
+  return true;
+}, {
+  message: "Purchase amount is required when acquisition method is purchase",
+  path: ["acquisitionCost"]
 }).refine((data) => {
   // Batch tracking requires average weight
   if (data.trackingType === "batch" && (!data.weight || data.weight <= 0)) {
@@ -194,6 +204,45 @@ export const createFeedingSchema = z.object({
   animalsCount: z.number().int().positive().optional(),
   notes: z.string().max(500).optional()
 });
+
+// Feeding Schedule Schema (Reminders)
+const hhmm = z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:mm');
+const daysOfWeek = z.array(z.number().int().min(0).max(6)).optional();
+
+const feedingScheduleBaseSchema = z.object({
+  livestockId: z.string().optional(),
+  timesOfDay: z.array(hhmm).min(1, 'At least one reminder time is required'),
+  daysOfWeek,
+  timezone: z.string().optional(),
+  scheduleType: z.enum(["morning", "afternoon", "evening", "ad_libitum"]).optional(),
+  feedType: z.string().max(200).optional(),
+  feedBrand: z.string().max(100).optional(),
+  enabled: z.boolean().optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export const createFeedingScheduleSchema = feedingScheduleBaseSchema.refine((data) => {
+  const unique = new Set(data.timesOfDay);
+  return unique.size === data.timesOfDay.length;
+}, {
+  message: 'Duplicate times are not allowed',
+  path: ['timesOfDay'],
+});
+
+export const updateFeedingScheduleSchema = feedingScheduleBaseSchema
+  .partial()
+  .superRefine((data, ctx) => {
+    if (Array.isArray(data.timesOfDay)) {
+      const unique = new Set(data.timesOfDay);
+      if (unique.size !== data.timesOfDay.length) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'Duplicate times are not allowed',
+          path: ['timesOfDay'],
+        });
+      }
+    }
+  });
 
 // Breeding Record Schema
 export const createBreedingSchema = z.object({

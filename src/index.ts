@@ -39,6 +39,9 @@ import { initBreedingFollowUpReminderSchedule } from './Queues/breedingFollowUpR
 import { initDiagnosisWorker } from './Workers/diagnosis.worker';
 import { initLivestockDiagnosisWorker } from './Workers/livestockDiagnosis.worker';
 import { initLivestockHealthCheckWorker } from './Workers/livestockHealthCheck.worker';
+import { initCarbonAccrualWorker } from './Workers/carbonAccrual.worker';
+import { initFeedingReminderWorker } from './Workers/feedingReminder.worker';
+import { initFeedingReminderSchedule } from './Queues/feedingReminder.queue';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -67,6 +70,11 @@ if (runWorkers) {
   initDiagnosisWorker();
   initLivestockDiagnosisWorker();
   initLivestockHealthCheckWorker();
+  initCarbonAccrualWorker();
+
+  initFeedingReminderWorker();
+  const feedingReminderInterval = (process.env.FEEDING_REMINDER_INTERVAL || '15-min') as any;
+  initFeedingReminderSchedule(feedingReminderInterval);
 } else {
   logger.warn('Queue workers are disabled (RUN_WORKERS=false or QUEUE_MODE=inline).');
 }

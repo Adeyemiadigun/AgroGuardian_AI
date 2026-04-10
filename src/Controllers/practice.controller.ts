@@ -2,13 +2,17 @@ import { Response } from "express";
 import { AuthRequest } from "../Types/auth.types";
 import {
   createCropSeason,
+  updateCropSeason,
+  deleteCropSeason,
   logPracticeActivity,
   completePracticeActivity,
   getFarmActivities,
   getFarmCropSeasons,
   addCropToFarm,
+  deleteCrop,
   getFarmCrops,
   getReferenceCrops,
+  getReferenceCropMaturity,
   getAllPractices,
 } from "../Services/practice.service";
 import logger from "../Utils/logger";
@@ -112,6 +116,28 @@ export const getReferenceCropsController = async (req: AuthRequest, res: Respons
   }
 };
 
+export const getReferenceCropsMaturityController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const q = (v: any) => (Array.isArray(v) ? v[0] : v);
+    const category = q(req.query.category) as string;
+    const name = q(req.query.name) as string;
+
+    const data = await getReferenceCropMaturity(category, name);
+
+    res.status(200).json({
+      success: true,
+      message: "Crop maturity ranges retrieved successfully",
+      data,
+    });
+  } catch (error: any) {
+    logger.error("Error getting crop maturity ranges", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get crop maturity ranges",
+    });
+  }
+};
+
 export const logActivityController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId as string;
@@ -197,21 +223,82 @@ export const getFarmActivitiesController = async (req: AuthRequest, res: Respons
 };
 
 export const getFarmCropSeasonsController = async (req: AuthRequest, res: Response): Promise<void> => {
-    try {
-        const farmId = req.params.farmId as string;
-        const userId = req.user!.userId as string;
-    
-        const seasons = await getFarmCropSeasons(farmId, userId);
-        res.status(200).json({
-          success: true,
-          message: "Crop seasons retrieved successfully",
-          data: seasons,
-        });
-      } catch (error: any) {
-        logger.error("Error getting crop seasons", error);
-        res.status(400).json({
-          success: false,
-          message: error.message || "Failed to get crop seasons",
-        });
-      }
+  try {
+    const farmId = req.params.farmId as string;
+    const userId = req.user!.userId as string;
+
+    const seasons = await getFarmCropSeasons(farmId, userId);
+    res.status(200).json({
+      success: true,
+      message: "Crop seasons retrieved successfully",
+      data: seasons,
+    });
+  } catch (error: any) {
+    logger.error("Error getting crop seasons", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to get crop seasons",
+    });
+  }
+};
+
+export const updateCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const farmId = req.params.farmId as string;
+    const seasonId = req.params.seasonId as string;
+    const userId = req.user!.userId as string;
+
+    const updated = await updateCropSeason(userId, farmId, seasonId, req.body);
+    res.status(200).json({
+      success: true,
+      message: "Crop season updated successfully",
+      data: updated,
+    });
+  } catch (error: any) {
+    logger.error("Error updating crop season", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to update crop season",
+    });
+  }
+};
+
+export const deleteCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const farmId = req.params.farmId as string;
+    const seasonId = req.params.seasonId as string;
+    const userId = req.user!.userId as string;
+
+    await deleteCropSeason(userId, farmId, seasonId);
+    res.status(200).json({
+      success: true,
+      message: "Crop season deleted successfully",
+    });
+  } catch (error: any) {
+    logger.error("Error deleting crop season", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to delete crop season",
+    });
+  }
+};
+
+export const deleteCropController = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const farmId = req.params.farmId as string;
+    const cropId = req.params.cropId as string;
+    const userId = req.user!.userId as string;
+
+    await deleteCrop(userId, farmId, cropId);
+    res.status(200).json({
+      success: true,
+      message: "Crop deleted successfully",
+    });
+  } catch (error: any) {
+    logger.error("Error deleting crop", error);
+    res.status(400).json({
+      success: false,
+      message: error.message || "Failed to delete crop",
+    });
+  }
 };

@@ -1,7 +1,7 @@
-import { LivestockFeeding, LivestockBreeding } from '../Models/LivestockManagement';
+import { LivestockFeeding, LivestockFeedingSchedule, LivestockBreeding } from '../Models/LivestockManagement';
 import Livestock from '../Models/Livestock';
 import { Types } from 'mongoose';
-import type { IBreedingFollowUp, ILivestockFeeding, ILivestockBreeding } from '../Types/livestock.types';
+import type { IBreedingFollowUp, ILivestockFeeding, ILivestockFeedingSchedule, ILivestockBreeding } from '../Types/livestock.types';
 
 export class LivestockFeedBreedingService {
   // ==================== FEEDING ====================
@@ -94,42 +94,76 @@ export class LivestockFeedBreedingService {
     return feeding;
   }
 
-  async getFeedingRecords(farmId: string, options: { 
-    livestockId?: string; 
-    startDate?: Date; 
+  async getFeedingRecords(farmId: string, options: {
+    livestockId?: string;
+    startDate?: Date;
     endDate?: Date;
     limit?: number;
   } = {}): Promise<ILivestockFeeding[]> {
     const query: any = { farmId: new Types.ObjectId(farmId) };
-    
+
     if (options.livestockId) {
       query.livestockId = new Types.ObjectId(options.livestockId);
     }
-    
+
     if (options.startDate || options.endDate) {
-      query.feedingDate = {};
-      if (options.startDate) query.feedingDate.$gte = options.startDate;
-      if (options.endDate) query.feedingDate.$lte = options.endDate;
+      query.feedingTime = {};
+      if (options.startDate) query.feedingTime.$gte = options.startDate;
+      if (options.endDate) query.feedingTime.$lte = options.endDate;
     }
 
     return LivestockFeeding.find(query)
       .populate('livestockId', 'name tagId species')
-      .sort({ feedingDate: -1 })
+      .sort({ feedingTime: -1 })
       .limit(options.limit || 100);
   }
 
-  async getFeedingSchedules(farmId: string): Promise<ILivestockFeeding[]> {
-    return LivestockFeeding.find({
+  async createFeedingSchedule(data: Partial<ILivestockFeedingSchedule> & { farmId: string; userId: string }): Promise<ILivestockFeedingSchedule> {
+    const schedule = await LivestockFeedingSchedule.create({
+      ...data,
+      farmId: new Types.ObjectId(data.farmId),
+      owner: new Types.ObjectId(data.userId),
+      livestockId: data.livestockId ? new Types.ObjectId(data.livestockId as string) : undefined,
+    });
+    return schedule;
+  }
+
+  async getFeedingSchedules(farmId: string, userId: string): Promise<ILivestockFeedingSchedule[]> {
+    return LivestockFeedingSchedule.find({
       farmId: new Types.ObjectId(farmId),
-      isScheduled: true
+      owner: new Types.ObjectId(userId),
     })
       .populate('livestockId', 'name tagId species')
-      .sort({ scheduledTime: 1 });
+      .sort({ createdAt: -1 })
+      .limit(200);
+  }
+
+  async updateFeedingSchedule(scheduleId: string, userId: string, data: Partial<ILivestockFeedingSchedule>): Promise<ILivestockFeedingSchedule | null> {
+    const update: any = { ...data };
+    if ((data as any).livestockId) {
+      update.livestockId = new Types.ObjectId((data as any).livestockId);
+    }
+
+    return LivestockFeedingSchedule.findOneAndUpdate(
+      { _id: new Types.ObjectId(scheduleId), owner: new Types.ObjectId(userId) },
+      { $set: update },
+      { new: true }
+    );
+  }
+
+  async deleteFeedingSchedule(scheduleId: string, userId: string): Promise<boolean> {
+    const result = await LivestockFeedingSchedule.findOneAndDelete({
+      _id: new Types.ObjectId(scheduleId),
+      owner: new Types.ObjectId(userId),
+    });
+    return !!result;
   }
 
   async getFeedConsumptionStats(farmId: string, days: number = 30): Promise<{
     totalCost: number;
     totalQuantity: number;
+    totalRecords: number;
+    dailyAverage: number;
     byFeedType: { feedType: string; quantity: number; cost: number }[];
     bySpecies: { species: string; quantity: number; cost: number }[];
   }> {
@@ -140,26 +174,15 @@ export class LivestockFeedBreedingService {
       {
         $match: {
           farmId: new Types.ObjectId(farmId),
-          feedingDate: { $gte: startDate }
+          feedingTime: { $gte: startDate }
         }
-      },
-      {
-        $lookup: {
-          from: 'livestocks',
-          localField: 'livestockId',
-          foreignField: '_id',
-          as: 'livestock'
-        }
-      },
-      {
-        $unwind: { path: '$livestock', preserveNullAndEmptyArrays: true }
       },
       {
         $group: {
           _id: null,
-          totalCost: { $sum: '$cost' },
-          totalQuantity: { $sum: '$quantity' },
-          records: { $push: '$$ROOT' }
+          totalCost: { $sum: { $ifNull: ['$totalCost', 0] } },
+          totalQuantity: { $sum: { $ifNull: ['$quantity', 0] } },
+          totalRecords: { $sum: 1 }
         }
       }
     ]);
@@ -168,24 +191,30 @@ export class LivestockFeedBreedingService {
       {
         $match: {
           farmId: new Types.ObjectId(farmId),
-          feedingDate: { $gte: startDate }
+          feedingTime: { $gte: startDate }
         }
       },
       {
         $group: {
           _id: '$feedType',
-          quantity: { $sum: '$quantity' },
-          cost: { $sum: '$cost' }
+          quantity: { $sum: { $ifNull: ['$quantity', 0] } },
+          cost: { $sum: { $ifNull: ['$totalCost', 0] } }
         }
       },
       { $project: { feedType: '$_id', quantity: 1, cost: 1, _id: 0 } }
     ]);
 
+    const totalCost = stats[0]?.totalCost || 0;
+    const totalQuantity = stats[0]?.totalQuantity || 0;
+    const totalRecords = stats[0]?.totalRecords || 0;
+
     return {
-      totalCost: stats[0]?.totalCost || 0,
-      totalQuantity: stats[0]?.totalQuantity || 0,
+      totalCost,
+      totalQuantity,
+      totalRecords,
+      dailyAverage: days > 0 ? totalQuantity / days : 0,
       byFeedType,
-      bySpecies: [] // Would need livestock join
+      bySpecies: [] // optional enhancement later (requires livestock join)
     };
   }
 
@@ -214,6 +243,19 @@ export class LivestockFeedBreedingService {
     return status as any;
   }
 
+  private addDays(date: Date, days: number): Date {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
+  }
+
+  private httpError(status: number, message: string, extra?: Record<string, any>) {
+    const err: any = new Error(message);
+    err.status = status;
+    if (extra) Object.assign(err, extra);
+    return err;
+  }
+
   async addBreedingRecord(data: Partial<ILivestockBreeding> & { farmId: string; userId: string }): Promise<ILivestockBreeding> {
     const rawDamId = (data as any).damId || (data as any).femaleId;
     const rawSireId = (data as any).sireId || (data as any).maleId;
@@ -223,6 +265,51 @@ export class LivestockFeedBreedingService {
     }
 
     const { femaleId, maleId, expectedBirthDate, ...rest } = data as any;
+
+    // Prevent overlapping breeding cycles + enforce postpartum cooldown (60 days after birth)
+    const farmObjectId = new Types.ObjectId(data.farmId);
+    const ownerObjectId = new Types.ObjectId(data.userId);
+    const damObjectId = new Types.ObjectId(rawDamId as string);
+
+    const activeExisting = await LivestockBreeding.findOne({
+      farmId: farmObjectId,
+      owner: ownerObjectId,
+      damId: damObjectId,
+      $or: [{ status: { $in: ['bred', 'confirmed_pregnant'] } }, { isPregnant: true }],
+    })
+      .sort({ breedingDate: -1 })
+      .lean();
+
+    if (activeExisting) {
+      throw this.httpError(
+        409,
+        'This female already has an active breeding record. Record the outcome (birth/failed) before adding a new one.',
+        { reason: 'active_breeding' }
+      );
+    }
+
+    const lastDelivered = await LivestockBreeding.findOne({
+      farmId: farmObjectId,
+      owner: ownerObjectId,
+      damId: damObjectId,
+      status: 'delivered',
+      birthDate: { $exists: true, $ne: null },
+    })
+      .sort({ birthDate: -1 })
+      .lean();
+
+    if (lastDelivered?.birthDate) {
+      const nextEligible = this.addDays(new Date(lastDelivered.birthDate as any), 60);
+      if (Date.now() < nextEligible.getTime()) {
+        throw this.httpError(
+          409,
+          `Post-birth rest period: this female can be bred again on ${nextEligible
+            .toISOString()
+            .slice(0, 10)} (60 days after birth).`,
+          { reason: 'postpartum_cooldown', nextEligibleDate: nextEligible.toISOString() }
+        );
+      }
+    }
 
     const breeding = await LivestockBreeding.create({
       ...rest,

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { livestockFeedBreedingService } from '../Services/livestock-feed-breeding.service';
+import { createFeedingScheduleSchema, updateFeedingScheduleSchema } from '../Validators/livestock.validator';
 
 export class LivestockFeedBreedingController {
   // ==================== FEEDING ====================
@@ -46,15 +47,92 @@ export class LivestockFeedBreedingController {
     }
   }
 
+  async createFeedingSchedule(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { farmId } = req.params;
+      const userId = (req as any).userId;
+
+      const validationResult = createFeedingScheduleSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const errors = validationResult.error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+        }));
+        return res.status(400).json({ success: false, message: 'Validation failed', errors });
+      }
+
+      const schedule = await livestockFeedBreedingService.createFeedingSchedule({
+        ...validationResult.data,
+        farmId,
+        userId,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Feeding schedule created',
+        data: schedule,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async getFeedingSchedules(req: Request, res: Response, next: NextFunction) {
     try {
       const { farmId } = req.params;
-      const schedules = await livestockFeedBreedingService.getFeedingSchedules(farmId);
+      const userId = (req as any).userId;
+
+      const schedules = await livestockFeedBreedingService.getFeedingSchedules(farmId, userId);
 
       res.json({
         success: true,
-        data: schedules
+        data: schedules,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async updateFeedingSchedule(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { scheduleId } = req.params;
+      const userId = (req as any).userId;
+
+      const validationResult = updateFeedingScheduleSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const errors = validationResult.error.issues.map((issue) => ({
+          field: issue.path.join('.'),
+          message: issue.message,
+        }));
+        return res.status(400).json({ success: false, message: 'Validation failed', errors });
+      }
+
+      const schedule = await livestockFeedBreedingService.updateFeedingSchedule(scheduleId, userId, validationResult.data);
+      if (!schedule) {
+        return res.status(404).json({ success: false, message: 'Feeding schedule not found' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Feeding schedule updated',
+        data: schedule,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteFeedingSchedule(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { scheduleId } = req.params;
+      const userId = (req as any).userId;
+
+      const deleted = await livestockFeedBreedingService.deleteFeedingSchedule(scheduleId, userId);
+      if (!deleted) {
+        return res.status(404).json({ success: false, message: 'Feeding schedule not found' });
+      }
+
+      res.json({ success: true, message: 'Feeding schedule deleted' });
     } catch (error) {
       next(error);
     }
@@ -129,6 +207,15 @@ export class LivestockFeedBreedingController {
         data: breeding
       });
     } catch (error: any) {
+      if (error?.status === 409) {
+        return res.status(409).json({
+          success: false,
+          message: error?.message || 'Breeding is not allowed yet',
+          reason: error?.reason,
+          nextEligibleDate: error?.nextEligibleDate,
+        });
+      }
+
       // Convert schema validation issues into a client error instead of a 500
       if (error?.name === 'ValidationError' || String(error?.message || '').toLowerCase().includes('damid')) {
         return res.status(400).json({

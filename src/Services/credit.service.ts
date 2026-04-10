@@ -1,5 +1,4 @@
 import CarbonCredits from "../Models/CarbonCredits";
-import CarbonCalculation from "../Models/CarbonCalculations";
 import Farm from "../Models/Farm";
 import logger from "../Utils/logger";
 import mongoose from "mongoose";
@@ -16,43 +15,61 @@ export const generateCreditsForFarm = async (
       throw new Error("Farm not found or you don't have permission");
     }
 
-    // 1. Aggregate calculations in period
-    const calculations = await CarbonCalculation.find({
+    if (!periodStart || !periodEnd || isNaN(periodStart.getTime()) || isNaN(periodEnd.getTime())) {
+      throw new Error("Invalid periodStart/periodEnd");
+    }
+    if (periodStart.getTime() > periodEnd.getTime()) {
+      throw new Error("periodStart must be before periodEnd");
+    }
+
+    // Credits are auto-created per successfully verified practice activity (see carbon.service.ts + verification.service.ts).
+    // So this endpoint should NOT mint duplicates. Instead, it "issues" already-verified credits for the selected period.
+    const match = {
       farmId,
       periodStart: { $gte: periodStart },
       periodEnd: { $lte: periodEnd },
+    };
+
+    const alreadyIssuedCount = await CarbonCredits.countDocuments({
+      ...match,
+      status: "issued",
     });
 
-    if (calculations.length === 0) {
-      throw new Error("No carbon calculations found for this period");
-    }
+    const issueNow = new Date();
 
-    const totalSequestered = calculations.reduce(
-      (sum, calc) => sum + calc.CarbonSequestered,
-      0
+    const issueResult = await CarbonCredits.updateMany(
+      {
+        ...match,
+        status: "verified",
+      },
+      {
+        $set: { status: "issued", issuedDate: issueNow, updatedAt: issueNow },
+      }
     );
 
-    // 2. Apply Buffer Pool (20% holdback for risk)
-    const bufferMultiplier = 0.8; 
-    const creditsToIssue = totalSequestered * bufferMultiplier;
-
-    // 3. Create Carbon Credit record
-    const credit = await CarbonCredits.create({
-      farmId,
-      creditsEarned: creditsToIssue,
-      status: "pending-verification",
-      issuedDate: new Date(),
-      periodStart,
-      periodEnd,
+    const issuedCredits = await CarbonCredits.find({
+      ...match,
+      status: "issued",
     });
 
-    logger.info(`Generated ${creditsToIssue} credits for farm ${farmId} (Period: ${periodStart.toLocaleDateString()} - ${periodEnd.toLocaleDateString()})`);
-    
+    const issuedTotal = issuedCredits.reduce((sum, c: any) => sum + Number(c.creditsEarned || 0), 0);
+
+    if ((issueResult.modifiedCount || 0) === 0 && alreadyIssuedCount === 0) {
+      throw new Error("No verified credits found for this period (complete and verify practice logs first)");
+    }
+
+    logger.info(`Issued credits for farm ${farmId} (Period: ${periodStart.toISOString()} - ${periodEnd.toISOString()})`, {
+      farmId,
+      modified: issueResult.modifiedCount,
+      matched: issueResult.matchedCount,
+      alreadyIssuedCount,
+      issuedTotal,
+    });
+
     return {
-      totalSequestered,
-      creditsToIssue,
-      bufferHeld: totalSequestered - creditsToIssue,
-      creditRecord: credit,
+      alreadyIssuedCount,
+      newlyIssuedCount: issueResult.modifiedCount || 0,
+      issuedTotal,
     };
   } catch (error: any) {
     logger.error("Credit generation error:", error);

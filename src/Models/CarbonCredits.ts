@@ -14,6 +14,24 @@ const CarbonCreditsSchema = new Schema<ICarbonCredit>({
     ref: "Farm",
     required: true,
   },
+  practiceLogId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "PracticeActivityLogs",
+    required: false,
+  },
+  monthKey: {
+    type: String,
+    required: false,
+  },
+  creditType: {
+    type: String,
+    enum: ["accrual", "final"],
+    default: "final",
+  },
+  isEstimated: {
+    type: Boolean,
+    default: false,
+  },
   creditsEarned: {
     type: Number,
     required: true,
@@ -49,6 +67,12 @@ const CarbonCreditsSchema = new Schema<ICarbonCredit>({
     default: Date.now,
   },
 });
+
+// Prevent duplicates for monthly accrual credits (legacy credits without practiceLogId/monthKey are unaffected)
+CarbonCreditsSchema.index(
+  { practiceLogId: 1, monthKey: 1, creditType: 1 },
+  { unique: true, sparse: true }
+);
 
 const CarbonCredits = mongoose.model<ICarbonCredit>("CarbonCredits", CarbonCreditsSchema);
 

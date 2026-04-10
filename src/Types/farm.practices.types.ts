@@ -54,6 +54,10 @@ export interface ICarbonCalculations extends Document {
 
 export interface ICarbonCredit extends Document {
   farmId: IFarm["_id"];
+  practiceLogId?: IPracticeActivityLogs["_id"]; // present for monthly accrual credits
+  monthKey?: string; // YYYY-MM for accrual credits
+  creditType?: "accrual" | "final";
+  isEstimated?: boolean;
   creditsEarned: number;
   status: "pending-verification" | "verified" | "issued" | "retired";
   periodStart: Date;

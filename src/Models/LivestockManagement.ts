@@ -1,5 +1,5 @@
 import mongoose, { Schema } from "mongoose";
-import { ILivestockFeeding, ILivestockBreeding, ILivestockInventory, IVetConsultation } from "../Types/livestock.types";
+import { ILivestockFeeding, ILivestockFeedingSchedule, ILivestockBreeding, ILivestockInventory, IVetConsultation } from "../Types/livestock.types";
 
 // Feeding Records Schema
 const livestockFeedingSchema = new Schema<ILivestockFeeding>(
@@ -45,6 +45,41 @@ livestockFeedingSchema.index({ livestockId: 1 });
 livestockFeedingSchema.index({ feedingTime: -1 });
 
 export const LivestockFeeding = mongoose.model<ILivestockFeeding>("LivestockFeeding", livestockFeedingSchema);
+
+// Feeding Schedules Schema (Reminders)
+const livestockFeedingScheduleSchema = new Schema<ILivestockFeedingSchedule>(
+  {
+    livestockId: { type: Schema.Types.ObjectId, ref: "Livestock" },
+    farmId: { type: Schema.Types.ObjectId, ref: "Farm", required: true },
+    owner: { type: Schema.Types.ObjectId, ref: "User", required: true },
+
+    timesOfDay: { type: [String], required: true }, // ["07:00", "16:00"]
+    daysOfWeek: { type: [Number] }, // 0..6 (optional)
+    timezone: { type: String, default: "Africa/Lagos" },
+
+    scheduleType: {
+      type: String,
+      enum: ["morning", "afternoon", "evening", "ad_libitum"],
+    },
+
+    feedType: { type: String },
+    feedBrand: { type: String },
+
+    enabled: { type: Boolean, default: true },
+    lastReminderKeys: { type: [String], default: [] },
+
+    notes: { type: String },
+  },
+  { timestamps: true }
+);
+
+livestockFeedingScheduleSchema.index({ farmId: 1, owner: 1, enabled: 1 });
+livestockFeedingScheduleSchema.index({ livestockId: 1 });
+
+export const LivestockFeedingSchedule = mongoose.model<ILivestockFeedingSchedule>(
+  "LivestockFeedingSchedule",
+  livestockFeedingScheduleSchema
+);
 
 // Breeding Records Schema
 const livestockBreedingSchema = new Schema<ILivestockBreeding>(

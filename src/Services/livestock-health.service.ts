@@ -329,6 +329,90 @@ export class LivestockHealthService {
       .sort({ nextDueDate: 1 });
   }
 
+  async addBulkDewormings(params: {
+    farmId: string;
+    userId: string;
+    scope: 'all' | 'species' | 'selected';
+    species?: string[];
+    livestockIds?: string[];
+    productName: string;
+    activeIngredient?: string;
+    dosage: string;
+    dateAdministered: Date | string;
+    nextDueDate?: Date | string;
+    targetParasites?: string[];
+    cost?: number;
+    notes?: string;
+  }): Promise<{
+    targetedLivestock: number;
+    targetedAnimals: number;
+    createdCount: number;
+    livestockIds: string[];
+  }> {
+    const farmObjectId = new Types.ObjectId(params.farmId);
+    const userObjectId = new Types.ObjectId(params.userId);
+
+    const match: any = {
+      farmId: farmObjectId,
+      owner: userObjectId,
+      status: { $in: ['active', 'breeding'] }
+    };
+
+    if (params.scope === 'species') {
+      const list = (params.species || []).filter(Boolean);
+      match.species = { $in: list };
+    }
+
+    if (params.scope === 'selected') {
+      const ids = (params.livestockIds || []).filter(Boolean);
+      match._id = { $in: ids.map((id) => new Types.ObjectId(id)) };
+    }
+
+    const targets = await Livestock.find(match).select('_id trackingType quantity species');
+
+    const targetedLivestock = targets.length;
+    const targetedAnimals = targets.reduce((sum: number, item: any) => {
+      return sum + (item.trackingType === 'batch' ? (item.quantity || 1) : 1);
+    }, 0);
+
+    if (targetedLivestock === 0) {
+      return { targetedLivestock: 0, targetedAnimals: 0, createdCount: 0, livestockIds: [] };
+    }
+
+    const dateAdministered = new Date(params.dateAdministered);
+    const nextDueDate = params.nextDueDate ? new Date(params.nextDueDate) : undefined;
+
+    const docs = targets.map((t: any) => ({
+      livestockId: t._id,
+      farmId: farmObjectId,
+      productName: params.productName,
+      activeIngredient: params.activeIngredient,
+      dosage: params.dosage,
+      dateAdministered,
+      administeredBy: userObjectId,
+      nextDueDate,
+      targetParasites: params.targetParasites,
+      cost: params.cost,
+      notes: params.notes
+    }));
+
+    const created = await LivestockDeworming.insertMany(docs, { ordered: true });
+
+    // Non-blocking health check recompute/queue. (For large farms, don't hold the HTTP response.)
+    setImmediate(() => {
+      targets.forEach((t: any) => {
+        safeEnqueueHealthCheck(t._id.toString(), 'deworming_added');
+      });
+    });
+
+    return {
+      targetedLivestock,
+      targetedAnimals,
+      createdCount: created.length,
+      livestockIds: targets.map((t: any) => t._id.toString())
+    };
+  }
+
   // ==================== HEALTH SUMMARY ====================
 
   async getHealthSummary(farmId: string): Promise<{
@@ -350,7 +434,8 @@ export class LivestockHealthService {
       activeIllnesses
     ] = await Promise.all([
       Livestock.aggregate([
-        { $match: { farmId: farmObjectId, isActive: true } },
+        { $match: { farmId: farmObjectId, status: { $in: ['active', 'breeding'] } } },
+
         {
           $group: {
             _id: '$healthStatus',

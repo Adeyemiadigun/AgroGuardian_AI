@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createFarmController, getAllFarms, getFarm, updateFarmController, deleteFarmController } from "../Controllers/farm.controller";
+import { createFarmController, getAllFarms, getFarm, updateFarmController, deleteFarmController, decommissionFarmController } from "../Controllers/farm.controller";
 import { authenticate } from "../Middlewares/auth.middleware";
 import { validate } from "../Middlewares/validate.middleware";
 import { createFarmSchema, updateFarmSchema } from "../Validators/farm.validator";
@@ -14,6 +14,8 @@ router.get("/", authenticate as any, getAllFarms as any);
 router.get("/:farmId", authenticate as any, getFarm as any);
 
 router.put("/:farmId", authenticate as any, validate(updateFarmSchema), updateFarmController as any);
+
+router.patch("/:farmId/decommission", authenticate as any, decommissionFarmController as any);
 
 router.delete("/:farmId", authenticate as any, deleteFarmController as any);
 

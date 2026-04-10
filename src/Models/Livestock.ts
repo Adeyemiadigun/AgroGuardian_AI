@@ -41,7 +41,10 @@ const livestockSchema = new Schema<ILivestock>(
       enum: ["birth", "purchase", "gift", "other"],
       default: "purchase"
     },
+    // Amount paid (only for purchase)
     acquisitionCost: { type: Number },
+    // Farmer's expected selling price / current value
+    cost: { type: Number },
 
     // Physical attributes
     weight: { type: Number },

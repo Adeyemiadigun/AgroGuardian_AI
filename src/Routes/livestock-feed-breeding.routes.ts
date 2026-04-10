@@ -21,10 +21,28 @@ router.get(
   livestockFeedBreedingController.getFeedingRecords.bind(livestockFeedBreedingController)
 );
 
+// Create feeding schedule for farm
+router.post(
+  '/farms/:farmId/feeding/schedules',
+  livestockFeedBreedingController.createFeedingSchedule.bind(livestockFeedBreedingController)
+);
+
 // Get feeding schedules for farm
 router.get(
   '/farms/:farmId/feeding/schedules',
   livestockFeedBreedingController.getFeedingSchedules.bind(livestockFeedBreedingController)
+);
+
+// Update feeding schedule
+router.put(
+  '/feeding-schedules/:scheduleId',
+  livestockFeedBreedingController.updateFeedingSchedule.bind(livestockFeedBreedingController)
+);
+
+// Delete feeding schedule
+router.delete(
+  '/feeding-schedules/:scheduleId',
+  livestockFeedBreedingController.deleteFeedingSchedule.bind(livestockFeedBreedingController)
 );
 
 // Get feed consumption stats

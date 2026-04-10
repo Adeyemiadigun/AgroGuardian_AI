@@ -57,6 +57,9 @@ router.get('/farms/:farmId/checkups/recent', livestockHealthController.getRecent
 // Upcoming dewormings for farm
 router.get('/farms/:farmId/dewormings/upcoming', livestockHealthController.getUpcomingDewormings.bind(livestockHealthController));
 
+// Bulk deworming records for a farm (quick action)
+router.post('/farms/:farmId/dewormings/bulk', livestockHealthController.addBulkDewormings.bind(livestockHealthController));
+
 // ==================== RECORD MANAGEMENT ====================
 
 // Update/delete vaccination

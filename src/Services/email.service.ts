@@ -112,3 +112,31 @@ export const sendPasswordResetEmail = async (
 
   await addEmailToQueue(email, "Reset Your Password - AgroGuardian AI", htmlContent);
 };
+
+export const sendFeedingReminderEmail = async (
+  email: string,
+  args: {
+    time: string; // HH:mm
+    timezone?: string;
+    farmName?: string;
+    livestockName?: string;
+  }
+): Promise<void> => {
+  const subject = `Feeding reminder: ${args.time}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d7a3a;">🍽️ Feeding Reminder</h2>
+      <p>It's time to feed your livestock.</p>
+      <div style="background: #f6ffed; border: 1px solid #b7eb8f; padding: 12px; border-radius: 8px; margin: 12px 0;">
+        <p style="margin: 0;"><strong>Time:</strong> ${args.time}${args.timezone ? ` (${args.timezone})` : ''}</p>
+        ${args.farmName ? `<p style="margin: 6px 0 0;"><strong>Farm:</strong> ${args.farmName}</p>` : ''}
+        ${args.livestockName ? `<p style="margin: 6px 0 0;"><strong>Animal:</strong> ${args.livestockName}</p>` : ''}
+      </div>
+      <p>Open AgroGuardian to log the feeding record.</p>
+      <p style="color: #999; font-size: 12px;">You can disable reminders in Feeding Schedules.</p>
+    </div>
+  `;
+
+  await addEmailToQueue(email, subject, htmlContent);
+};

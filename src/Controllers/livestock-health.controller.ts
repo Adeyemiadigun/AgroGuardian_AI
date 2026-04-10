@@ -437,6 +437,72 @@ export class LivestockHealthController {
     }
   }
 
+  async addBulkDewormings(req: Request, res: Response, next: NextFunction) {
+    try {
+      const farmId = getSingleString((req.params as any).farmId);
+      const userId = (req as any).userId;
+      if (!farmId) return badRequest(res, 'farmId is required');
+
+      const scope = (req.body?.scope || 'all') as 'all' | 'species' | 'selected';
+      if (!['all', 'species', 'selected'].includes(scope)) {
+        return badRequest(res, 'scope must be one of: all, species, selected');
+      }
+
+      const productName = typeof req.body?.productName === 'string' ? req.body.productName.trim() : '';
+      const dosage = typeof req.body?.dosage === 'string' ? req.body.dosage.trim() : '';
+      const dateAdministeredRaw = req.body?.dateAdministered;
+
+      if (!productName) return badRequest(res, 'productName is required');
+      if (!dosage) return badRequest(res, 'dosage is required');
+      if (!dateAdministeredRaw) return badRequest(res, 'dateAdministered is required');
+
+      const dateAdministered = new Date(dateAdministeredRaw);
+      if (Number.isNaN(dateAdministered.getTime())) {
+        return badRequest(res, 'dateAdministered must be a valid date');
+      }
+
+      const nextDueDateRaw = req.body?.nextDueDate;
+      const nextDueDate = nextDueDateRaw ? new Date(nextDueDateRaw) : undefined;
+      if (nextDueDateRaw && nextDueDate && Number.isNaN(nextDueDate.getTime())) {
+        return badRequest(res, 'nextDueDate must be a valid date');
+      }
+
+      const costRaw = req.body?.cost;
+      const cost = costRaw === undefined || costRaw === null || costRaw === '' ? undefined : Number(costRaw);
+      if (costRaw !== undefined && costRaw !== null && costRaw !== '' && !Number.isFinite(cost as number)) {
+        return badRequest(res, 'cost must be a valid number');
+      }
+
+      const species = Array.isArray(req.body?.species) ? req.body.species : undefined;
+      const livestockIds = Array.isArray(req.body?.livestockIds) ? req.body.livestockIds : undefined;
+      const targetParasites = Array.isArray(req.body?.targetParasites) ? req.body.targetParasites : undefined;
+
+      const result = await livestockHealthService.addBulkDewormings({
+        farmId,
+        userId,
+        scope,
+        species,
+        livestockIds,
+        productName,
+        activeIngredient: req.body?.activeIngredient,
+        dosage,
+        dateAdministered,
+        nextDueDate,
+        targetParasites,
+        cost,
+        notes: req.body?.notes
+      });
+
+      res.status(201).json({
+        success: true,
+        message: result.createdCount > 0 ? 'Bulk deworming records added successfully' : 'No eligible livestock found for the selected scope',
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // ==================== HEALTH SUMMARY ====================
 
   async getHealthSummary(req: Request, res: Response, next: NextFunction) {
