@@ -131,7 +131,7 @@ export const getFarmsByOwner = async (ownerId: string) => {
             Crop.find({ farmId: farm._id }).lean(),
             WeatherData.findOne({ farmId: farm._id }).sort({ timestamp: -1 }).select('current timestamp').lean(),
             ClimateRisk.findOne({ farmId: farm._id }).sort({ timestamp: -1 }).lean(),
-            ResilienceProfile.findOne({ farmId: farm._id }).lean()
+            ResilienceProfile.findOne({ farmId: farm._id } as any).lean()
         ]);
 
         return {

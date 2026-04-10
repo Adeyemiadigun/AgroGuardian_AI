@@ -7,7 +7,7 @@ import { addLivestockHealthCheckJob } from '../Queues/livestockHealthCheck.queue
 
 export const getLivestockHealthCheckController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { livestockId } = req.params;
+    const livestockId = req.params.livestockId as string;
     const userId = req.user!.userId as string;
 
     const report = await livestockHealthCheckService.getLatestReport(livestockId, userId);
@@ -28,7 +28,7 @@ export const getLivestockHealthCheckController = async (req: AuthRequest, res: R
 
 export const recomputeLivestockHealthCheckController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { livestockId } = req.params;
+    const livestockId = req.params.livestockId as string;
     const userId = req.user!.userId as string;
 
     const owned = await Livestock.findOne({ _id: livestockId, owner: userId }).select('_id');

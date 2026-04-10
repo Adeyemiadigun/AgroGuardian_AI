@@ -7,7 +7,7 @@ export class LivestockFeedBreedingController {
 
   async addFeedingRecord(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const userId = (req as any).userId;
 
       const feeding = await livestockFeedBreedingService.addFeedingRecord({
@@ -28,7 +28,7 @@ export class LivestockFeedBreedingController {
 
   async getFeedingRecords(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const { livestockId, startDate, endDate, limit } = req.query;
 
       const records = await livestockFeedBreedingService.getFeedingRecords(farmId, {
@@ -49,7 +49,7 @@ export class LivestockFeedBreedingController {
 
   async createFeedingSchedule(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const userId = (req as any).userId;
 
       const validationResult = createFeedingScheduleSchema.safeParse(req.body);
@@ -62,8 +62,8 @@ export class LivestockFeedBreedingController {
       }
 
       const schedule = await livestockFeedBreedingService.createFeedingSchedule({
-        ...validationResult.data,
-        farmId,
+        ...(validationResult.data as any),
+        farmId: farmId as any,
         userId,
       });
 
@@ -79,7 +79,7 @@ export class LivestockFeedBreedingController {
 
   async getFeedingSchedules(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const userId = (req as any).userId;
 
       const schedules = await livestockFeedBreedingService.getFeedingSchedules(farmId, userId);
@@ -95,7 +95,7 @@ export class LivestockFeedBreedingController {
 
   async updateFeedingSchedule(req: Request, res: Response, next: NextFunction) {
     try {
-      const { scheduleId } = req.params;
+      const scheduleId = req.params.scheduleId as string;
       const userId = (req as any).userId;
 
       const validationResult = updateFeedingScheduleSchema.safeParse(req.body);
@@ -107,7 +107,7 @@ export class LivestockFeedBreedingController {
         return res.status(400).json({ success: false, message: 'Validation failed', errors });
       }
 
-      const schedule = await livestockFeedBreedingService.updateFeedingSchedule(scheduleId, userId, validationResult.data);
+      const schedule = await livestockFeedBreedingService.updateFeedingSchedule(scheduleId, userId, validationResult.data as any);
       if (!schedule) {
         return res.status(404).json({ success: false, message: 'Feeding schedule not found' });
       }
@@ -124,7 +124,7 @@ export class LivestockFeedBreedingController {
 
   async deleteFeedingSchedule(req: Request, res: Response, next: NextFunction) {
     try {
-      const { scheduleId } = req.params;
+      const scheduleId = req.params.scheduleId as string;
       const userId = (req as any).userId;
 
       const deleted = await livestockFeedBreedingService.deleteFeedingSchedule(scheduleId, userId);
@@ -140,8 +140,8 @@ export class LivestockFeedBreedingController {
 
   async getFeedConsumptionStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 30;
+      const farmId = req.params.farmId as string;
+      const days = parseInt((String(req.query.days)) as string) || 30;
 
       const stats = await livestockFeedBreedingService.getFeedConsumptionStats(farmId, days);
 
@@ -156,7 +156,7 @@ export class LivestockFeedBreedingController {
 
   async updateFeedingRecord(req: Request, res: Response, next: NextFunction) {
     try {
-      const { feedingId } = req.params;
+      const feedingId = req.params.feedingId as string;
       const record = await livestockFeedBreedingService.updateFeedingRecord(feedingId, req.body);
 
       if (!record) {
@@ -175,7 +175,7 @@ export class LivestockFeedBreedingController {
 
   async deleteFeedingRecord(req: Request, res: Response, next: NextFunction) {
     try {
-      const { feedingId } = req.params;
+      const feedingId = req.params.feedingId as string;
       const deleted = await livestockFeedBreedingService.deleteFeedingRecord(feedingId);
 
       if (!deleted) {
@@ -192,7 +192,7 @@ export class LivestockFeedBreedingController {
 
   async addBreedingRecord(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const userId = (req as any).userId;
 
       const breeding = await livestockFeedBreedingService.addBreedingRecord({
@@ -229,7 +229,7 @@ export class LivestockFeedBreedingController {
 
   async getBreedingRecords(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const { livestockId, status, limit } = req.query;
 
       const records = await livestockFeedBreedingService.getBreedingRecords(farmId, {
@@ -249,7 +249,7 @@ export class LivestockFeedBreedingController {
 
   async getActivePregnancies(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const pregnancies = await livestockFeedBreedingService.getActivePregnancies(farmId);
 
       res.json({
@@ -263,8 +263,8 @@ export class LivestockFeedBreedingController {
 
   async getUpcomingBirths(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 30;
+      const farmId = req.params.farmId as string;
+      const days = parseInt((String(req.query.days)) as string) || 30;
 
       const births = await livestockFeedBreedingService.getUpcomingBirths(farmId, days);
 
@@ -279,7 +279,7 @@ export class LivestockFeedBreedingController {
 
   async confirmPregnancy(req: Request, res: Response, next: NextFunction) {
     try {
-      const { breedingId } = req.params;
+      const breedingId = req.params.breedingId as string;
       const record = await livestockFeedBreedingService.confirmPregnancy(breedingId, req.body || {});
 
       if (!record) {
@@ -298,7 +298,7 @@ export class LivestockFeedBreedingController {
 
   async getBreedingFollowUps(req: Request, res: Response, next: NextFunction) {
     try {
-      const { breedingId } = req.params;
+      const breedingId = req.params.breedingId as string;
       const followUps = await livestockFeedBreedingService.getBreedingFollowUps(breedingId);
 
       res.json({
@@ -312,7 +312,8 @@ export class LivestockFeedBreedingController {
 
   async updateBreedingFollowUp(req: Request, res: Response, next: NextFunction) {
     try {
-      const { breedingId, followUpId } = req.params;
+      const breedingId = req.params.breedingId as string;
+      const followUpId = req.params.followUpId as string;
       const updated = await livestockFeedBreedingService.updateBreedingFollowUp(breedingId, followUpId, req.body || {});
 
       if (!updated) {
@@ -331,7 +332,7 @@ export class LivestockFeedBreedingController {
 
   async updateBreedingRecord(req: Request, res: Response, next: NextFunction) {
     try {
-      const { breedingId } = req.params;
+      const breedingId = req.params.breedingId as string;
       const record = await livestockFeedBreedingService.updateBreedingRecord(breedingId, req.body);
 
       if (!record) {
@@ -350,7 +351,7 @@ export class LivestockFeedBreedingController {
 
   async recordBirth(req: Request, res: Response, next: NextFunction) {
     try {
-      const { breedingId } = req.params;
+      const breedingId = req.params.breedingId as string;
       const record = await livestockFeedBreedingService.recordBirth(breedingId, req.body);
 
       if (!record) {
@@ -369,7 +370,7 @@ export class LivestockFeedBreedingController {
 
   async getBreedingStats(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const stats = await livestockFeedBreedingService.getBreedingStats(farmId);
 
       res.json({
@@ -383,7 +384,7 @@ export class LivestockFeedBreedingController {
 
   async deleteBreedingRecord(req: Request, res: Response, next: NextFunction) {
     try {
-      const { breedingId } = req.params;
+      const breedingId = req.params.breedingId as string;
       const deleted = await livestockFeedBreedingService.deleteBreedingRecord(breedingId);
 
       if (!deleted) {

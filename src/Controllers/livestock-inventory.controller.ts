@@ -4,7 +4,7 @@ import { livestockInventoryService } from '../Services/livestock-inventory.servi
 export class LivestockInventoryController {
   async addTransaction(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const userId = (req as any).userId;
 
       const transaction = await livestockInventoryService.addTransaction({
@@ -25,7 +25,7 @@ export class LivestockInventoryController {
 
   async getTransactions(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const { type, species, startDate, endDate, limit } = req.query;
 
       const transactions = await livestockInventoryService.getTransactions(farmId, {
@@ -47,7 +47,7 @@ export class LivestockInventoryController {
 
   async getInventorySummary(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const summary = await livestockInventoryService.getInventorySummary(farmId);
 
       res.json({
@@ -61,8 +61,8 @@ export class LivestockInventoryController {
 
   async getMortalityReport(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 90;
+      const farmId = req.params.farmId as string;
+      const days = parseInt((String(req.query.days)) as string) || 90;
 
       const report = await livestockInventoryService.getMortalityReport(farmId, days);
 
@@ -77,8 +77,8 @@ export class LivestockInventoryController {
 
   async getFinancialSummary(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const year = req.query.year ? parseInt(req.query.year as string) : undefined;
+      const farmId = req.params.farmId as string;
+      const year = (String(req.query.year)) ? parseInt((String(req.query.year)) as string) : undefined;
 
       const summary = await livestockInventoryService.getFinancialSummary(farmId, year);
 
@@ -93,7 +93,7 @@ export class LivestockInventoryController {
 
   async updateTransaction(req: Request, res: Response, next: NextFunction) {
     try {
-      const { transactionId } = req.params;
+      const transactionId = req.params.transactionId as string;
       const transaction = await livestockInventoryService.updateTransaction(transactionId, req.body);
 
       if (!transaction) {
@@ -112,7 +112,7 @@ export class LivestockInventoryController {
 
   async deleteTransaction(req: Request, res: Response, next: NextFunction) {
     try {
-      const { transactionId } = req.params;
+      const transactionId = req.params.transactionId as string;
       const deleted = await livestockInventoryService.deleteTransaction(transactionId);
 
       if (!deleted) {

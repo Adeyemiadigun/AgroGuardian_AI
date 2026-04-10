@@ -33,7 +33,7 @@ export const processCropDiagnosisJob = async (data: CropDiagnosisJobData) => {
         }
       : undefined;
 
-    const aiResult = await analyzeCropImage(imageUrls, cropType, farmContext);
+    const aiResult = await analyzeCropImage(imageUrls, cropType) as any; // farmContext removed
 
     const updateData: any = {
       diagnosis: aiResult.diagnosis,

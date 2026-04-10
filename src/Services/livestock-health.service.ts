@@ -58,11 +58,11 @@ export class LivestockHealthService {
 
     await safeEnqueueHealthCheck(data.livestockId, 'vaccination_added');
 
-    return vaccination;
+    return vaccination as any;
   }
 
   async getVaccinations(livestockId: string): Promise<ILivestockVaccination[]> {
-    return LivestockVaccination.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ dateAdministered: -1 });
+    return LivestockVaccination.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ dateAdministered: -1 }).lean() as any;
   }
 
   async getUpcomingVaccinations(farmId: string, days: number = 30): Promise<ILivestockVaccination[]> {
@@ -74,7 +74,7 @@ export class LivestockHealthService {
       nextDueDate: { $lte: futureDate, $gte: new Date() },
     })
       .populate('livestockId', 'name tagId species breed')
-      .sort({ nextDueDate: 1 });
+      .sort({ nextDueDate: 1 }).lean() as any;
   }
 
   async updateVaccination(vaccinationId: string, data: Partial<ILivestockVaccination>): Promise<ILivestockVaccination | null> {
@@ -83,7 +83,7 @@ export class LivestockHealthService {
     if (livestockId) {
       await safeEnqueueHealthCheck(livestockId, 'vaccination_updated');
     }
-    return vaccination;
+    return vaccination as any;
   }
 
   async deleteVaccination(vaccinationId: string): Promise<boolean> {
@@ -122,11 +122,11 @@ export class LivestockHealthService {
 
     await safeEnqueueHealthCheck(data.livestockId, 'treatment_added');
 
-    return treatment;
+    return treatment as any;
   }
 
   async getTreatments(livestockId: string): Promise<ILivestockTreatment[]> {
-    return LivestockTreatment.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ startDate: -1 });
+    return LivestockTreatment.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ startDate: -1 }).lean() as any;
   }
 
   async getActiveTreatments(farmId: string): Promise<ILivestockTreatment[]> {
@@ -135,7 +135,7 @@ export class LivestockHealthService {
       status: 'ongoing',
     })
       .populate('livestockId', 'name tagId species breed healthStatus')
-      .sort({ startDate: -1 });
+      .sort({ startDate: -1 }).lean() as any;
   }
 
   async updateTreatment(treatmentId: string, data: Partial<ILivestockTreatment>): Promise<ILivestockTreatment | null> {
@@ -153,7 +153,7 @@ export class LivestockHealthService {
       await safeEnqueueHealthCheck(livestockId, 'treatment_updated');
     }
 
-    return treatment;
+    return treatment as any;
   }
 
   async deleteTreatment(treatmentId: string): Promise<boolean> {
@@ -203,11 +203,11 @@ export class LivestockHealthService {
 
     await safeEnqueueHealthCheck(data.livestockId, 'illness_reported');
 
-    return illness;
+    return illness as any;
   }
 
   async getIllnesses(livestockId: string): Promise<ILivestockIllness[]> {
-    return LivestockIllness.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ dateIdentified: -1 });
+    return LivestockIllness.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ dateIdentified: -1 }).lean() as any;
   }
 
   async getActiveIllnesses(farmId: string): Promise<ILivestockIllness[]> {
@@ -216,7 +216,7 @@ export class LivestockHealthService {
       status: { $in: ['active', 'under_treatment'] },
     })
       .populate('livestockId', 'name tagId species breed healthStatus')
-      .sort({ dateIdentified: -1 });
+      .sort({ dateIdentified: -1 }).lean() as any;
   }
 
   async updateIllness(illnessId: string, data: Partial<ILivestockIllness>): Promise<ILivestockIllness | null> {
@@ -234,7 +234,7 @@ export class LivestockHealthService {
       await safeEnqueueHealthCheck(livestockId, 'illness_updated');
     }
 
-    return illness;
+    return illness as any;
   }
 
   // ==================== CHECKUPS ====================
@@ -268,11 +268,11 @@ export class LivestockHealthService {
 
     await safeEnqueueHealthCheck(data.livestockId, 'checkup_added');
 
-    return checkup;
+    return checkup as any;
   }
 
   async getCheckups(livestockId: string): Promise<ILivestockCheckup[]> {
-    return LivestockCheckup.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ checkupDate: -1 });
+    return LivestockCheckup.find({ livestockId: new Types.ObjectId(livestockId) }).sort({ checkupDate: -1 }).lean() as any;
   }
 
   async getRecentCheckups(farmId: string, days: number = 30): Promise<ILivestockCheckup[]> {
@@ -284,7 +284,7 @@ export class LivestockHealthService {
       checkupDate: { $gte: pastDate },
     })
       .populate('livestockId', 'name tagId species breed')
-      .sort({ checkupDate: -1 });
+      .sort({ checkupDate: -1 }).lean() as any;
   }
 
   // ==================== DEWORMING ====================
@@ -309,12 +309,12 @@ export class LivestockHealthService {
       // non-blocking
     }
 
-    return record;
+    return record as any;
   }
 
   async getDewormings(livestockId: string): Promise<ILivestockDeworming[]> {
     return LivestockDeworming.find({ livestockId: new Types.ObjectId(livestockId) })
-      .sort({ dateAdministered: -1 });
+      .sort({ dateAdministered: -1 }).lean() as any;
   }
 
   async getUpcomingDewormings(farmId: string, days: number = 30): Promise<ILivestockDeworming[]> {
@@ -326,7 +326,7 @@ export class LivestockHealthService {
       nextDueDate: { $lte: futureDate, $gte: new Date() }
     })
       .populate('livestockId', 'name tagId species breed')
-      .sort({ nextDueDate: 1 });
+      .sort({ nextDueDate: 1 }).lean() as any;
   }
 
   async addBulkDewormings(params: {
@@ -488,14 +488,20 @@ export class LivestockHealthService {
     const livestockObjectId = new Types.ObjectId(livestockId);
 
     const [vaccinations, treatments, illnesses, checkups, dewormings] = await Promise.all([
-      LivestockVaccination.find({ livestockId: livestockObjectId }).sort({ dateAdministered: -1 }),
-      LivestockTreatment.find({ livestockId: livestockObjectId }).sort({ startDate: -1 }),
-      LivestockIllness.find({ livestockId: livestockObjectId }).sort({ dateIdentified: -1 }),
-      LivestockCheckup.find({ livestockId: livestockObjectId }).sort({ checkupDate: -1 }),
-      LivestockDeworming.find({ livestockId: livestockObjectId }).sort({ dateAdministered: -1 })
+      LivestockVaccination.find({ livestockId: livestockObjectId }).sort({ dateAdministered: -1 }).lean(),
+      LivestockTreatment.find({ livestockId: livestockObjectId }).sort({ startDate: -1 }).lean(),
+      LivestockIllness.find({ livestockId: livestockObjectId }).sort({ dateIdentified: -1 }).lean(),
+      LivestockCheckup.find({ livestockId: livestockObjectId }).sort({ checkupDate: -1 }).lean(),
+      LivestockDeworming.find({ livestockId: livestockObjectId }).sort({ dateAdministered: -1 }).lean()
     ]);
 
-    return { vaccinations, treatments, illnesses, checkups, dewormings };
+    return { 
+      vaccinations: vaccinations as any as ILivestockVaccination[], 
+      treatments: treatments as any as ILivestockTreatment[], 
+      illnesses: illnesses as any as ILivestockIllness[], 
+      checkups: checkups as any as ILivestockCheckup[], 
+      dewormings: dewormings as any as ILivestockDeworming[] 
+    };
   }
 }
 

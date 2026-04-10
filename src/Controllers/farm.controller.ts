@@ -63,7 +63,7 @@ export const getAllFarms = async (req: AuthRequest, res: Response): Promise<void
 
 export const getFarm = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const farmId = Array.isArray(req.params.farmId) ? req.params.farmId[0] : req.params.farmId;
+        const farmId = Array.isArray((req.params.farmId as string)) ? (req.params.farmId as string)[0] : (req.params.farmId as string);
         const farm = await getFarmById(farmId, req.user!.userId);
         res.status(200).json({ 
             success: true, 
@@ -81,7 +81,7 @@ export const getFarm = async (req: AuthRequest, res: Response): Promise<void> =>
 
 export const updateFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {        
-        const farmId = Array.isArray(req.params.farmId) ? req.params.farmId[0] : req.params.farmId;
+        const farmId = Array.isArray((req.params.farmId as string)) ? (req.params.farmId as string)[0] : (req.params.farmId as string);
         const updatedFarm = await updateFarm(farmId, req.user!.userId, req.body);
         res.status(200).json({ 
             success: true, 
@@ -99,7 +99,7 @@ export const updateFarmController = async (req: AuthRequest, res: Response): Pro
 
 export const decommissionFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const farmId = Array.isArray(req.params.farmId) ? req.params.farmId[0] : req.params.farmId;
+        const farmId = Array.isArray((req.params.farmId as string)) ? (req.params.farmId as string)[0] : (req.params.farmId as string);
         const userId = req.user!.userId as string;
         const result = await decommissionFarm(farmId, userId);
         res.status(200).json({
@@ -117,7 +117,7 @@ export const decommissionFarmController = async (req: AuthRequest, res: Response
 
 export const deleteFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const farmId = Array.isArray(req.params.farmId) ? req.params.farmId[0] : req.params.farmId;
+        const farmId = Array.isArray((req.params.farmId as string)) ? (req.params.farmId as string)[0] : (req.params.farmId as string);
         const userId = req.user!.userId as string;
         const result = await deleteFarm(farmId, userId);
         res.status(200).json({ 

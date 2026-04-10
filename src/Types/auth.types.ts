@@ -1,6 +1,6 @@
 import { Document } from "mongoose";
 import { Request } from "express";
-import { File as MulterFile } from "multer";
+type MulterFile = Express.Multer.File;
 
 export interface IUser extends Document {
   firstName: string;

@@ -89,7 +89,7 @@ export class LivestockFeedBreedingService {
       ...data,
       farmId: new Types.ObjectId(data.farmId),
       owner: new Types.ObjectId(data.userId),
-      livestockId: data.livestockId ? new Types.ObjectId(data.livestockId as string) : undefined
+      livestockId: data.livestockId ? new Types.ObjectId(String(data.livestockId)) : undefined
     });
     return feeding;
   }
@@ -123,7 +123,7 @@ export class LivestockFeedBreedingService {
       ...data,
       farmId: new Types.ObjectId(data.farmId),
       owner: new Types.ObjectId(data.userId),
-      livestockId: data.livestockId ? new Types.ObjectId(data.livestockId as string) : undefined,
+      livestockId: data.livestockId ? new Types.ObjectId(String(data.livestockId)) : undefined,
     });
     return schedule;
   }

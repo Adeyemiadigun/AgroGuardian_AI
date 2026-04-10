@@ -131,18 +131,18 @@ export const toggleTreatmentTask = async (
   const diagnosis = await CropDiagnosis.findOne({ _id: diagnosisId, userId });
   if (!diagnosis) throw new Error("Diagnosis not found");
 
-  const taskIndex = diagnosis.treatmentPlan.findIndex(t => (t as any)._id.toString() === taskId);
+  const taskIndex = (diagnosis.treatmentPlan || []).findIndex(t => (t as any)._id.toString() === taskId);
   if (taskIndex === -1) throw new Error("Task not found in treatment plan");
 
-  diagnosis.treatmentPlan[taskIndex].isCompleted = !diagnosis.treatmentPlan[taskIndex].isCompleted;
+  (diagnosis.treatmentPlan || [])[taskIndex].isCompleted = !(diagnosis.treatmentPlan || [])[taskIndex].isCompleted;
   await diagnosis.save();
 
   const user = await User.findById(userId);
-  if (user && diagnosis.treatmentPlan[taskIndex].isCompleted) {
+  if (user && (diagnosis.treatmentPlan || [])[taskIndex].isCompleted) {
     await createNotification(
       userId,
       "Task Completed",
-      `Great job! You've completed: ${diagnosis.treatmentPlan[taskIndex].task}`,
+      `Great job! You've completed: ${(diagnosis.treatmentPlan || [])[taskIndex].task}`,
       "treatment"
     );
   }
@@ -186,7 +186,7 @@ export const sendChatMessage = async (
       temperature: latestWeather.current.temperature,
       humidity: latestWeather.current.humidity,
       weather: latestWeather.current.weatherDescription,
-      soilType: farm.soilType,
+      soilType: (farm.soilType || []).join(", "),
       location: `${farm.location.city}, ${farm.location.country}`
     } : undefined
   });

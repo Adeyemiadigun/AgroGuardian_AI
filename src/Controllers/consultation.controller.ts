@@ -41,11 +41,11 @@ export const createConsultationController = async (req: AuthRequest, res: Respon
 
 export const getConsultationsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId;
+    const farmId = (req.params.farmId as string);
     const userId = req.user!.userId as string;
-    const status = req.query.status as "active" | "resolved" | "archived" | undefined;
+    const status = (String(req.query.status)) as "active" | "resolved" | "archived" | undefined;
 
-    const consultations = await getConsultationsByFarm(farmId, userId, status);
+    const consultations = await getConsultationsByFarm(farmId, userId, status as any);
     res.status(200).json({
       success: true,
       message: "Consultations retrieved successfully",
@@ -62,7 +62,7 @@ export const getConsultationsController = async (req: AuthRequest, res: Response
 
 export const getConsultationController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const consultationId = req.params.consultationId;
+    const consultationId = (req.params.consultationId as string);
     const userId = req.user!.userId as string;
 
     const consultation = await getConsultationById(consultationId, userId);
@@ -82,7 +82,7 @@ export const getConsultationController = async (req: AuthRequest, res: Response)
 
 export const sendMessageController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const consultationId = req.params.consultationId;
+    const consultationId = (req.params.consultationId as string);
     const userId = req.user!.userId as string;
     const { message } = req.body;
 
@@ -113,11 +113,11 @@ export const sendMessageController = async (req: AuthRequest, res: Response): Pr
 
 export const updateStatusController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const consultationId = req.params.consultationId;
+    const consultationId = (req.params.consultationId as string);
     const userId = req.user!.userId as string;
     const { status } = req.body;
 
-    const consultation = await updateConsultationStatus(consultationId, userId, status);
+    const consultation = await updateConsultationStatus(consultationId, userId, status as any);
     res.status(200).json({
       success: true,
       message: "Consultation status updated",
@@ -135,7 +135,7 @@ export const updateStatusController = async (req: AuthRequest, res: Response): P
 export const getAllConsultationsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId as string;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = parseInt((String(req.query.limit)) as string) || 20;
 
     const consultations = await getAllUserConsultations(userId, limit);
     res.status(200).json({

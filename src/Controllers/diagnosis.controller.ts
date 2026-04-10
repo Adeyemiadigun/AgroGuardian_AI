@@ -47,7 +47,7 @@ export const diagnoseController = async (req: AuthRequest, res: Response): Promi
 
 export const getDiagnosesByFarmController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId;
+    const farmId = (req.params.farmId as string);
     const userId = req.user!.userId as string;
 
     const diagnoses = await getDiagnosesByFarm(farmId, userId);
@@ -67,7 +67,7 @@ export const getDiagnosesByFarmController = async (req: AuthRequest, res: Respon
 
 export const getDiagnosisController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = req.params.diagnosisId;
+    const diagnosisId = (req.params.diagnosisId as string);
     const userId = req.user!.userId as string;
 
     const diagnosis = await getDiagnosisById(diagnosisId, userId);
@@ -87,7 +87,7 @@ export const getDiagnosisController = async (req: AuthRequest, res: Response): P
 
 export const updateStatusController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = req.params.diagnosisId;
+    const diagnosisId = (req.params.diagnosisId as string);
     const userId = req.user!.userId as string;
 
     const diagnosis = await updateDiagnosisStatus(diagnosisId, userId, req.body.status);
@@ -107,7 +107,7 @@ export const updateStatusController = async (req: AuthRequest, res: Response): P
 
 export const sendChatController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = req.params.diagnosisId;
+    const diagnosisId = (req.params.diagnosisId as string);
     const userId = req.user!.userId as string;
 
     const result = await sendChatMessage(diagnosisId, userId, req.body.message);
@@ -127,7 +127,7 @@ export const sendChatController = async (req: AuthRequest, res: Response): Promi
 
 export const getChatController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const diagnosisId = req.params.diagnosisId;
+    const diagnosisId = (req.params.diagnosisId as string);
     const userId = req.user!.userId as string;
 
     const chat = await getChatHistory(diagnosisId, userId);
@@ -147,7 +147,8 @@ export const getChatController = async (req: AuthRequest, res: Response): Promis
 
 export const toggleTaskController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { diagnosisId, taskId } = req.params;
+    const diagnosisId = req.params.diagnosisId as string;
+      const taskId = req.params.taskId as string;
     const userId = req.user!.userId as string;
 
     const diagnosis = await toggleTreatmentTask(diagnosisId, userId, taskId);

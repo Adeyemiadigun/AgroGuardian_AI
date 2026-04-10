@@ -36,7 +36,7 @@ export const getAllPracticesController = async (req: AuthRequest, res: Response)
 
 export const createCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
+    const farmId = (req.params.farmId as string) as string;
     const userId = req.user!.userId as string;
 
     const cropSeason = await createCropSeason(userId, farmId, req.body);
@@ -58,7 +58,7 @@ export const createCropSeasonController = async (req: AuthRequest, res: Response
 
 export const addCropController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
+    const farmId = (req.params.farmId as string) as string;
     const userId = req.user!.userId as string;
 
     const crop = await addCropToFarm(userId, farmId, req.body);
@@ -80,7 +80,7 @@ export const addCropController = async (req: AuthRequest, res: Response): Promis
 
 export const getFarmCropsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
+    const farmId = (req.params.farmId as string) as string;
     const userId = req.user!.userId as string;
 
     const crops = await getFarmCrops(farmId, userId);
@@ -100,7 +100,7 @@ export const getFarmCropsController = async (req: AuthRequest, res: Response): P
 
 export const getReferenceCropsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const category = req.query.category as string;
+    const category = (String(req.query.category)) as string;
     const crops = await getReferenceCrops(category);
     res.status(200).json({
       success: true,
@@ -119,8 +119,8 @@ export const getReferenceCropsController = async (req: AuthRequest, res: Respons
 export const getReferenceCropsMaturityController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const q = (v: any) => (Array.isArray(v) ? v[0] : v);
-    const category = q(req.query.category) as string;
-    const name = q(req.query.name) as string;
+    const category = q((String(req.query.category))) as string;
+    const name = q((String(req.query.name))) as string;
 
     const data = await getReferenceCropMaturity(category, name);
 
@@ -169,7 +169,7 @@ export const logActivityController = async (req: AuthRequest, res: Response): Pr
 export const completeActivityController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId as string;
-    const { activityId } = req.params;
+    const activityId = req.params.activityId as string;
     const { notes } = req.body;
 
     // Use a more specific check for the file from multer
@@ -204,7 +204,7 @@ export const completeActivityController = async (req: AuthRequest, res: Response
 
 export const getFarmActivitiesController = async (req: AuthRequest, res: Response): Promise<void> => {
     try {
-        const farmId = req.params.farmId as string;
+        const farmId = (req.params.farmId as string) as string;
         const userId = req.user!.userId as string;
     
         const activities = await getFarmActivities(farmId, userId);
@@ -224,7 +224,7 @@ export const getFarmActivitiesController = async (req: AuthRequest, res: Respons
 
 export const getFarmCropSeasonsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
+    const farmId = (req.params.farmId as string) as string;
     const userId = req.user!.userId as string;
 
     const seasons = await getFarmCropSeasons(farmId, userId);
@@ -244,8 +244,8 @@ export const getFarmCropSeasonsController = async (req: AuthRequest, res: Respon
 
 export const updateCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
-    const seasonId = req.params.seasonId as string;
+    const farmId = (req.params.farmId as string) as string;
+    const seasonId = (req.params.seasonId as string) as string;
     const userId = req.user!.userId as string;
 
     const updated = await updateCropSeason(userId, farmId, seasonId, req.body);
@@ -265,8 +265,8 @@ export const updateCropSeasonController = async (req: AuthRequest, res: Response
 
 export const deleteCropSeasonController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
-    const seasonId = req.params.seasonId as string;
+    const farmId = (req.params.farmId as string) as string;
+    const seasonId = (req.params.seasonId as string) as string;
     const userId = req.user!.userId as string;
 
     await deleteCropSeason(userId, farmId, seasonId);
@@ -285,8 +285,8 @@ export const deleteCropSeasonController = async (req: AuthRequest, res: Response
 
 export const deleteCropController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
-    const cropId = req.params.cropId as string;
+    const farmId = (req.params.farmId as string) as string;
+    const cropId = (req.params.cropId as string) as string;
     const userId = req.user!.userId as string;
 
     await deleteCrop(userId, farmId, cropId);

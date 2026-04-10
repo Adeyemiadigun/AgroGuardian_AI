@@ -7,7 +7,7 @@ export class LivestockDiagnosisController {
    */
   async createDiagnosis(req: Request, res: Response, next: NextFunction) {
     try {
-      const livestockId = req.params.livestockId as string;
+      const livestockId = (req.params.livestockId as string) as string;
       const userId = (req as any).userId as string;
       const { symptoms, affectedCount } = req.body;
       
@@ -55,7 +55,7 @@ export class LivestockDiagnosisController {
    */
   async getDiagnosis(req: Request, res: Response, next: NextFunction) {
     try {
-      const diagnosisId = req.params.diagnosisId as string;
+      const diagnosisId = (req.params.diagnosisId as string) as string;
       const userId = (req as any).userId as string;
 
       const diagnosis = await livestockDiagnosisService.getDiagnosis(diagnosisId, userId);
@@ -74,7 +74,7 @@ export class LivestockDiagnosisController {
    */
   async getDiagnosesByLivestock(req: Request, res: Response, next: NextFunction) {
     try {
-      const livestockId = req.params.livestockId as string;
+      const livestockId = (req.params.livestockId as string) as string;
 
       const diagnoses = await livestockDiagnosisService.getDiagnosesByLivestock(livestockId);
 
@@ -92,7 +92,7 @@ export class LivestockDiagnosisController {
    */
   async getDiagnosesByFarm(req: Request, res: Response, next: NextFunction) {
     try {
-      const farmId = req.params.farmId as string;
+      const farmId = (req.params.farmId as string) as string;
       const { status, limit } = req.query;
 
       const diagnoses = await livestockDiagnosisService.getDiagnosesByFarm(farmId, {
@@ -114,7 +114,7 @@ export class LivestockDiagnosisController {
    */
   async chatAboutDiagnosis(req: Request, res: Response, next: NextFunction) {
     try {
-      const diagnosisId = req.params.diagnosisId as string;
+      const diagnosisId = (req.params.diagnosisId as string) as string;
       const userId = (req as any).userId as string;
       const { message } = req.body;
 
@@ -145,7 +145,7 @@ export class LivestockDiagnosisController {
    */
   async getChatHistory(req: Request, res: Response, next: NextFunction) {
     try {
-      const diagnosisId = req.params.diagnosisId as string;
+      const diagnosisId = (req.params.diagnosisId as string) as string;
       const userId = (req as any).userId as string;
 
       const history = await livestockDiagnosisService.getChatHistory(diagnosisId, userId);
@@ -164,7 +164,7 @@ export class LivestockDiagnosisController {
    */
   async updateDiagnosisStatus(req: Request, res: Response, next: NextFunction) {
     try {
-      const diagnosisId = req.params.diagnosisId as string;
+      const diagnosisId = (req.params.diagnosisId as string) as string;
       const userId = (req as any).userId as string;
 
       const allowedStatuses = ['detected', 'treating', 'treated', 'resolved'] as const;
@@ -201,8 +201,8 @@ export class LivestockDiagnosisController {
    */
   async toggleTreatmentPlanTask(req: Request, res: Response, next: NextFunction) {
     try {
-      const diagnosisId = req.params.diagnosisId as string;
-      const taskId = req.params.taskId as string;
+      const diagnosisId = (req.params.diagnosisId as string) as string;
+      const taskId = (req.params.taskId as string) as string;
       const userId = (req as any).userId as string;
 
       const diagnosis = await livestockDiagnosisService.toggleTreatmentPlanTask(diagnosisId, userId, taskId);

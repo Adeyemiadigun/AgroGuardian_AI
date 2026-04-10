@@ -4,7 +4,7 @@ import { livestockAlertsService } from '../Services/livestock-alerts.service';
 export class LivestockAlertsController {
   async getAllAlerts(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const alerts = await livestockAlertsService.getAllAlerts(farmId);
 
       res.json({
@@ -18,8 +18,8 @@ export class LivestockAlertsController {
 
   async getVaccinationAlerts(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 7;
+      const farmId = req.params.farmId as string;
+      const days = parseInt((String(req.query.days)) as string) || 7;
       
       const alerts = await livestockAlertsService.getVaccinationAlerts(farmId, days);
 
@@ -34,8 +34,8 @@ export class LivestockAlertsController {
 
   async getBreedingAlerts(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
-      const days = parseInt(req.query.days as string) || 30;
+      const farmId = req.params.farmId as string;
+      const days = parseInt((String(req.query.days)) as string) || 30;
       
       const alerts = await livestockAlertsService.getBreedingAlerts(farmId, days);
 
@@ -50,7 +50,7 @@ export class LivestockAlertsController {
 
   async getHealthAlerts(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const alerts = await livestockAlertsService.getHealthAlerts(farmId);
 
       res.json({
@@ -64,7 +64,7 @@ export class LivestockAlertsController {
 
   async getAlertSummary(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const summary = await livestockAlertsService.getAlertSummary(farmId);
 
       res.json({
@@ -78,7 +78,7 @@ export class LivestockAlertsController {
 
   async triggerNotifications(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const userId = (req as any).userId;
 
       const count = await livestockAlertsService.checkAndCreateNotifications(userId, farmId);

@@ -17,7 +17,7 @@ import logger from "../Utils/logger";
 // Get all livestock for a farm
 export const getLivestockController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { farmId } = req.params;
+    const farmId = req.params.farmId as string;
     const userId = req.user!.userId as string;
     const { species, status, trackingType } = req.query;
 
@@ -44,7 +44,7 @@ export const getLivestockController = async (req: AuthRequest, res: Response): P
 // Get single livestock
 export const getSingleLivestockController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { livestockId } = req.params;
+    const livestockId = req.params.livestockId as string;
     const userId = req.user!.userId as string;
 
     const data = await getLivestockById(livestockId, userId);
@@ -113,7 +113,7 @@ export const createLivestockController = async (req: AuthRequest, res: Response)
 // Update livestock
 export const updateLivestockController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { livestockId } = req.params;
+    const livestockId = req.params.livestockId as string;
     const userId = req.user!.userId as string;
     let bodyData = req.body;
 
@@ -162,7 +162,7 @@ export const updateLivestockController = async (req: AuthRequest, res: Response)
 // Add weight record
 export const addWeightController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { livestockId } = req.params;
+    const livestockId = req.params.livestockId as string;
     const userId = req.user!.userId as string;
 
     const validationResult = addWeightSchema.safeParse(req.body);
@@ -194,7 +194,7 @@ export const addWeightController = async (req: AuthRequest, res: Response): Prom
 // Delete livestock
 export const deleteLivestockController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { livestockId } = req.params;
+    const livestockId = req.params.livestockId as string;
     const userId = req.user!.userId as string;
 
     const result = await deleteLivestock(livestockId, userId);
@@ -215,7 +215,7 @@ export const deleteLivestockController = async (req: AuthRequest, res: Response)
 // Get livestock statistics
 export const getLivestockStatsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { farmId } = req.params;
+    const farmId = req.params.farmId as string;
     const userId = req.user!.userId as string;
 
     const stats = await getLivestockStats(farmId, userId);

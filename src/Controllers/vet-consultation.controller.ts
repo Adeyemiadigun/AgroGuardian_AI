@@ -39,7 +39,7 @@ export class VetConsultationController {
 
   async sendMessage(req: Request, res: Response, next: NextFunction) {
     try {
-      const { consultationId } = req.params;
+      const consultationId = req.params.consultationId as string;
       const userId = (req as any).userId;
       const { message } = req.body;
 
@@ -78,7 +78,7 @@ export class VetConsultationController {
 
   async getConsultation(req: Request, res: Response, next: NextFunction) {
     try {
-      const { consultationId } = req.params;
+      const consultationId = req.params.consultationId as string;
       const userId = (req as any).userId;
 
       const consultation = await vetConsultationService.getConsultation(consultationId, userId);
@@ -101,7 +101,7 @@ export class VetConsultationController {
 
   async getConsultations(req: Request, res: Response, next: NextFunction) {
     try {
-      const { farmId } = req.params;
+      const farmId = req.params.farmId as string;
       const { status, livestockId, limit } = req.query;
 
       const consultations = await vetConsultationService.getConsultations(farmId, {
@@ -121,7 +121,7 @@ export class VetConsultationController {
 
   async updateConsultation(req: Request, res: Response, next: NextFunction) {
     try {
-      const { consultationId } = req.params;
+      const consultationId = req.params.consultationId as string;
       const userId = (req as any).userId;
       const { status, title, summary, issueType, severity } = req.body;
 
@@ -150,7 +150,7 @@ export class VetConsultationController {
 
   async deleteConsultation(req: Request, res: Response, next: NextFunction) {
     try {
-      const { consultationId } = req.params;
+      const consultationId = req.params.consultationId as string;
       const userId = (req as any).userId;
 
       const deleted = await vetConsultationService.deleteConsultation(consultationId, userId);

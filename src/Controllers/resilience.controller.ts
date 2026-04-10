@@ -5,7 +5,7 @@ import logger from "../Utils/logger";
 
 export const getFarmResilience = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
+    const farmId = (req.params.farmId as string) as string;
     const userId = req.user!.userId;
 
     const profile = await getResilienceProfile(farmId, userId);
@@ -22,7 +22,7 @@ export const getFarmResilience = async (req: AuthRequest, res: Response): Promis
 
 export const triggerResilienceSync = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const farmId = req.params.farmId as string;
+    const farmId = (req.params.farmId as string) as string;
     const userId = req.user!.userId;
 
     const profile = await updateResilienceProfile(farmId, userId);
