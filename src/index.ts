@@ -81,7 +81,8 @@ if (runWorkers) {
 
 app.use(cors({
     origin: [
-        'http://localhost:5173'
+        'http://localhost:5173',
+        'https://agroguardian-frontend.vercel.app'
     ]}
 ));
 app.use(express.json());
