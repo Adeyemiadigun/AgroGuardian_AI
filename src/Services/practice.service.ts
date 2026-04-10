@@ -7,7 +7,7 @@ import Evidence from "../Models/Evidence";
 import logger from "../Utils/logger";
 import { ICrop, ICropSeason, IPracticeActivityLogs } from "../Types/farm.practices.types";
 import { calculateCarbonForActivity } from "./carbon.service";
-import { upsertMonthlyAccrualForPracticeLog } from "./carbon-accrual.service";
+import { upsertMonthlyAccrualForPracticeLog, backfillAccrualForPracticeLog } from "./carbon-accrual.service";
 import { verifyActivityEvidence } from "./verification.service";
 import cloudinary from "../Config/cloudinary";
 
@@ -664,9 +664,15 @@ export const logPracticeActivity = async (
     verificationFlags: [],
   });
 
-  // Create/update the current month's estimated accrual credit immediately (non-blocking)
-  upsertMonthlyAccrualForPracticeLog(activityLog._id.toString()).catch((err) =>
-    logger.error("Accrual init failed", { activityLogId: String(activityLog._id), err })
+  // Create/update historical and current monthly estimated accrual credits immediately (non-blocking)
+  Promise.all([
+    upsertMonthlyAccrualForPracticeLog(activityLog._id.toString()),
+    backfillAccrualForPracticeLog(activityLog._id.toString(), {
+      targetStatus: "pending-verification",
+      isEstimated: true,
+    })
+  ]).catch((err) =>
+    logger.error("Accrual backfill failed", { activityLogId: String(activityLog._id), err })
   );
 
   logger.info(`Practice activity initiated: ${practice.name} on farm ${data.farmId}`);
