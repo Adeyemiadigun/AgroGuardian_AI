@@ -129,7 +129,8 @@ export const googleCallback = async (req: Request, res: Response): Promise<void>
     const result = await googleLogin(user);
 
     const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
-    const redirectUrl = `${clientUrl}/auth/google/success?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}`;
+    const userBase64 = Buffer.from(JSON.stringify(result.user)).toString('base64');
+    const redirectUrl = `${clientUrl}/auth/google/success?accessToken=${result.accessToken}&refreshToken=${result.refreshToken}&user=${userBase64}`;
     res.redirect(redirectUrl);
   } catch (error: any) {
     logger.error("Google callback error", error);

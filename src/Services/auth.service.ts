@@ -27,11 +27,14 @@ export const registerUser = async (data: RegisterInput) => {
     email: email.toLowerCase(),
     password: hashedPassword,
     role: role || "farmer",
+    isEmailVerified: process.env.NODE_ENV !== "production", // Auto-verify in dev
     emailVerificationToken: hashedVerificationToken,
     emailVerificationTokenExpires: new Date(Date.now() + 24 * 60 * 60 * 1000), 
   });
 
-  await sendVerificationEmail(email, verificationToken);
+  if (process.env.NODE_ENV === "production") {
+    await sendVerificationEmail(email, verificationToken);
+  }
 
   logger.info(`User registered: ${email}`);
 
