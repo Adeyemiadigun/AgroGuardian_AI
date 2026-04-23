@@ -789,12 +789,16 @@ export class LivestockDiagnosisService {
 
     task.isCompleted = !task.isCompleted;
 
+    const anyCompleted = plan.some((t: any) => Boolean(t?.isCompleted));
     const allDone = plan.length > 0 && plan.every((t: any) => Boolean(t?.isCompleted));
 
     if (allDone) {
-      (diagnosis as any).status = 'treated';
+      (diagnosis as any).status = "treated";
+    } else if (anyCompleted) {
+      (diagnosis as any).status = "treating";
     } else {
-      (diagnosis as any).status = 'treating';
+      // If nothing is completed anymore, it's back to 'detected'
+      (diagnosis as any).status = "detected";
     }
 
     await (diagnosis as any).save();

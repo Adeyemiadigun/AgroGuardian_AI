@@ -21,7 +21,7 @@ export interface ICropDiagnosis extends Document {
     }[];
     prevention: string[];
     severity: "low" | "medium" | "high" | "critical";
-    status: "processing" | "detected" | "treating" | "resolved";
+    status: "processing" | "detected" | "treating" | "resolved" | "failed";
     aiModel: string;
     // Enhanced fields
     imageQuality?: "good" | "fair" | "poor";

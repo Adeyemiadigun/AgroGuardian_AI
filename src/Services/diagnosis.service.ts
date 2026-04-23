@@ -128,23 +128,60 @@ export const toggleTreatmentTask = async (
   userId: string,
   taskId: string
 ) => {
-  const diagnosis = await CropDiagnosis.findOne({ _id: diagnosisId, userId });
+  const diagnosis: any = await CropDiagnosis.findOne({ _id: diagnosisId, userId });
   if (!diagnosis) throw new Error("Diagnosis not found");
 
-  const taskIndex = (diagnosis.treatmentPlan || []).findIndex(t => (t as any)._id.toString() === taskId);
-  if (taskIndex === -1) throw new Error("Task not found in treatment plan");
+  if (diagnosis.status === "resolved") {
+    throw new Error("Diagnosis is already resolved");
+  }
 
-  (diagnosis.treatmentPlan || [])[taskIndex].isCompleted = !(diagnosis.treatmentPlan || [])[taskIndex].isCompleted;
+  const plan = diagnosis.treatmentPlan || [];
+  if (!Array.isArray(plan) || plan.length === 0) {
+    throw new Error("No treatment plan available for this diagnosis");
+  }
+
+  const task = typeof (plan as any).id === "function"
+    ? (plan as any).id(taskId)
+    : plan.find((t: any) => t?._id?.toString?.() === taskId);
+
+  if (!task) throw new Error("Task not found in treatment plan");
+
+  const prevStatus = diagnosis.status;
+  task.isCompleted = !task.isCompleted;
+
+  const anyCompleted = plan.some((t: any) => Boolean(t?.isCompleted));
+  const nextStatus = anyCompleted ? "treating" : "detected";
+  diagnosis.status = nextStatus;
+
   await diagnosis.save();
 
   const user = await User.findById(userId);
-  if (user && (diagnosis.treatmentPlan || [])[taskIndex].isCompleted) {
+
+  if (user && task.isCompleted) {
     await createNotification(
       userId,
       "Task Completed",
-      `Great job! You've completed: ${(diagnosis.treatmentPlan || [])[taskIndex].task}`,
+      `Great job! You've completed: ${task.task}`,
       "treatment"
     );
+  }
+
+  if (user && prevStatus !== nextStatus && nextStatus === "treating") {
+    await createNotification(
+      userId,
+      "Treatment Started",
+      `You've started treating your ${diagnosis.cropType} diagnosis by selecting items in the treatment plan.` ,
+      "treatment",
+      `/diagnosis?farmId=${diagnosis.farmId}`
+    );
+  }
+
+  if (prevStatus !== nextStatus) {
+    try {
+      addResilienceSyncJob(diagnosis.farmId.toString(), userId);
+    } catch {
+      // non-critical
+    }
   }
 
   return diagnosis;
