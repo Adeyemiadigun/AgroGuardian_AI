@@ -23,7 +23,7 @@ if (process.env.NODE_ENV !== 'production') {
     })
   );
 } else {
-  // In production (Vercel), only log to console since the file system is read-only
+  // In many production hosts, the file system can be ephemeral/read-only; log to console.
   transports.push(
     new winston.transports.Console({
       format: winston.format.combine(

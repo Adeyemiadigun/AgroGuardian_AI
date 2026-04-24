@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/feeding-reminders",
-      "schedule": "*/1 * * * *"
-    }
-  ]
-}
+{}

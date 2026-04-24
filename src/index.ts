@@ -28,7 +28,6 @@ import livestockFeedBreedingRoutes from './Routes/livestock-feed-breeding.routes
 import livestockInventoryRoutes from './Routes/livestock-inventory.routes';
 import vetConsultationRoutes from './Routes/vet-consultation.routes';
 import livestockAlertsRoutes from './Routes/livestock-alerts.routes';
-import cronRoutes from './Routes/cron.routes';
 
 // Workers & Queues
 import { initResilienceWorker } from './Workers/resilience.worker';
@@ -43,6 +42,8 @@ import { initLivestockHealthCheckWorker } from './Workers/livestockHealthCheck.w
 import { initCarbonAccrualWorker } from './Workers/carbonAccrual.worker';
 import { initFeedingReminderWorker } from './Workers/feedingReminder.worker';
 import { initFeedingReminderSchedule } from './Queues/feedingReminder.queue';
+import { initVaccinationReminderWorker } from './Workers/vaccinationReminder.worker';
+import { initVaccinationReminderSchedule } from './Queues/vaccinationReminder.queue';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -55,15 +56,6 @@ connectDB()
 let runWorkers = process.env.RUN_WORKERS
   ? process.env.RUN_WORKERS === 'true'
   : isRedisQueueEnabled();
-
-// Serverless platforms (e.g., Vercel) cannot run always-on background workers.
-// Use a cron HTTP endpoint instead.
-if (process.env.VERCEL) {
-  if (runWorkers) {
-    logger.warn('RUN_WORKERS is enabled but this looks like Vercel. Background workers will be disabled; use /api/cron/* endpoints.');
-  }
-  runWorkers = false;
-}
 
 if (runWorkers) {
   initResilienceWorker();
@@ -85,6 +77,10 @@ if (runWorkers) {
   initFeedingReminderWorker();
   const feedingReminderInterval = (process.env.FEEDING_REMINDER_INTERVAL || '15-min') as any;
   initFeedingReminderSchedule(feedingReminderInterval);
+
+  initVaccinationReminderWorker();
+  const vaccinationReminderInterval = (process.env.VACCINATION_REMINDER_INTERVAL || 'hourly') as any;
+  initVaccinationReminderSchedule(vaccinationReminderInterval);
 } else {
   logger.warn('Queue workers are disabled (RUN_WORKERS=false or QUEUE_MODE=inline).');
 }
@@ -97,8 +93,6 @@ app.use(cors({
 ));
 app.use(express.json());
 app.use(passport.initialize());
-
-app.use('/api/cron', cronRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);

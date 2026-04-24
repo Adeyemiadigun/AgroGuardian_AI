@@ -38,60 +38,12 @@ export const sendBrevoSMS = async (
   to: string,
   content: string
 ): Promise<void> => {
-  if (!BREVO_API_KEY) {
-    logger.error('BREVO_API_KEY is not set. Cannot send SMS.');
-    throw new Error('BREVO_API_KEY is not set');
-  }
-
-  // Normalize phone number: Brevo expects digits only for recipient (international format without +)
-  let normalizedRecipient = to.replace(/\D/g, "");
-
-  // Convert 00-prefixed international numbers (e.g. 00234...) -> 234...
-  if (normalizedRecipient.startsWith('00')) {
-    normalizedRecipient = normalizedRecipient.slice(2);
-  }
-
-  // Optional: help local numbers by injecting a default country code.
-  // Example: if user stored 08012345678 and SMS_DEFAULT_COUNTRY_CODE=234 => 2348012345678
-  const defaultCc = (process.env.SMS_DEFAULT_COUNTRY_CODE || '').replace(/\D/g, '');
-  if (defaultCc && normalizedRecipient.length >= 10 && normalizedRecipient.startsWith('0')) {
-    normalizedRecipient = `${defaultCc}${normalizedRecipient.slice(1)}`;
-  }
-
-  if (normalizedRecipient.length < 8) {
-    logger.warn(`Invalid phone number for SMS (after normalization): ${to}`);
-    return;
-  }
-
-  try {
-    const response = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
-      method: "POST",
-      headers: {
-        accept: "application/json",
-        "api-key": BREVO_API_KEY,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        type: "transactional",
-        sender: "AgroGuard", // Max 11 alphanumeric characters
-        recipient: normalizedRecipient,
-        content,
-        unicodeEnabled: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorData = await response.text();
-      logger.error(`Brevo SMS API error: ${response.status} - ${errorData}`);
-      throw new Error(`Failed to send SMS: ${response.statusText}`);
-    }
-
-    const masked = normalizedRecipient.length <= 4 ? '****' : `***${normalizedRecipient.slice(-4)}`;
-    logger.info(`SMS sent successfully to ${masked}`);
-  } catch (error: any) {
-    logger.error(`Error in sendBrevoSMS: ${error.message}`);
-    throw error;
-  }
+  // SMS integration is intentionally disabled for now.
+  // We'll re-enable this later when SMS delivery is prioritized.
+  const digits = String(to || '').replace(/\D/g, '');
+  const masked = digits.length <= 4 ? '****' : `***${digits.slice(-4)}`;
+  logger.warn('SMS sending is disabled; skipping.', { to: masked });
+  return;
 };
 
 export const sendVerificationEmail = async (
@@ -173,6 +125,38 @@ export const sendPasswordResetEmail = async (
   await addEmailToQueue(email, "Reset Your Password - AgroGuardian AI", htmlContent);
 };
 
+export const sendVaccinationReminderEmail = async (
+  email: string,
+  args: {
+    dueDate: Date;
+    vaccineName: string;
+    farmName?: string;
+    livestockName?: string;
+  }
+): Promise<void> => {
+  const due = new Date(args.dueDate);
+  const dueText = Number.isNaN(due.getTime()) ? '' : due.toLocaleDateString();
+
+  const subject = `Vaccination due${dueText ? `: ${dueText}` : ''} - ${args.vaccineName}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d7a3a;">💉 Vaccination Reminder</h2>
+      <p>You have an upcoming vaccination due.</p>
+      <div style="background: #f6ffed; border: 1px solid #b7eb8f; padding: 12px; border-radius: 8px; margin: 12px 0;">
+        <p style="margin: 0;"><strong>Vaccine:</strong> ${args.vaccineName}</p>
+        ${dueText ? `<p style="margin: 6px 0 0;"><strong>Due date:</strong> ${dueText}</p>` : ''}
+        ${args.farmName ? `<p style="margin: 6px 0 0;"><strong>Farm:</strong> ${args.farmName}</p>` : ''}
+        ${args.livestockName ? `<p style="margin: 6px 0 0;"><strong>Animal:</strong> ${args.livestockName}</p>` : ''}
+      </div>
+      <p>Open AgroGuardian to record the vaccination when completed.</p>
+      <p style="color: #999; font-size: 12px;">You can manage your livestock health records in the app.</p>
+    </div>
+  `;
+
+  await addEmailToQueue(email, subject, htmlContent);
+};
+
 export const sendFeedingReminderEmail = async (
   email: string,
   args: {
@@ -209,7 +193,13 @@ export const sendFeedingReminderSMS = async (
     livestockName?: string;
   }
 ): Promise<void> => {
-  const message = `AgroGuardian: Feeding Reminder! It's time (${args.time}) to feed${args.farmName ? ` at ${args.farmName}` : ''}${args.livestockName ? ` for ${args.livestockName}` : ''}. Open the app to log it.`;
-  
-  await sendBrevoSMS(phoneNumber, message);
+  // SMS integration is intentionally disabled for now.
+  // We'll use email + in-app notifications until SMS is prioritized.
+  const digits = String(phoneNumber || '').replace(/\D/g, '');
+  const masked = digits.length <= 4 ? '****' : `***${digits.slice(-4)}`;
+  logger.warn('Feeding reminder SMS is disabled; skipping.', {
+    to: masked,
+    time: args.time,
+  });
+  return;
 };

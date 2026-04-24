@@ -3,7 +3,7 @@ import { redisConnection } from '../Config/redis';
 import { FEEDING_REMINDER_QUEUE } from '../Queues/feedingReminder.queue';
 import { LivestockFeedingSchedule, LivestockFeeding } from '../Models/LivestockManagement';
 import logger from '../Utils/logger';
-import { sendFeedingReminderEmail, sendFeedingReminderSMS } from '../Services/email.service';
+import { sendFeedingReminderEmail } from '../Services/email.service';
 import { createNotification } from '../Services/notification.service';
 
 const WEEKDAY_MAP: Record<string, number> = {
@@ -104,6 +104,7 @@ export const runFeedingReminderSweep = async (opts: {
     outOfWindow: 0,
     alreadyReminded: 0,
     scheduleSaveFailed: 0,
+    smsDisabled: 0,
   };
 
   const sms = { attempted: 0, sent: 0, failed: 0, missingPhone: 0 };
@@ -260,22 +261,9 @@ export const runFeedingReminderSweep = async (opts: {
           email.missingEmail++;
         }
 
-        if (phoneNumber) {
-          sms.attempted++;
-          try {
-            await sendFeedingReminderSMS(phoneNumber, {
-              time: t,
-              farmName,
-              livestockName,
-            });
-            sms.sent++;
-          } catch (err: any) {
-            sms.failed++;
-            logger.error(`Failed to send feeding SMS to ${maskPhone(phoneNumber)}: ${err.message}`);
-          }
-        } else {
-          sms.missingPhone++;
-        }
+        // SMS is disabled for now. We'll rely on in-app notifications + email.
+        // (Keeping counters so logs are still informative.)
+        skips.smsDisabled++;
 
         lastKeys.push(reminderKey);
         remindersSent++;

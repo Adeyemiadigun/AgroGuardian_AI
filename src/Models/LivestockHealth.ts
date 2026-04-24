@@ -181,6 +181,11 @@ const vaccinationSchema = new Schema({
   veterinarianName: { type: String },
   nextDueDate: { type: Date },
   boosterRequired: { type: Boolean, default: false },
+
+  // Reminder dedupe (prevents repeated emails/notifications for the same due date)
+  lastReminderKey: { type: String },
+  lastReminderSentAt: { type: Date },
+
   cost: { type: Number },
   notes: { type: String },
   attachments: [{ type: String }]

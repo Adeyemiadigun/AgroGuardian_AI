@@ -502,6 +502,11 @@ export interface ILivestockVaccination extends Document {
   veterinarianName?: string;
   nextDueDate?: Date;
   boosterRequired?: boolean;
+
+  // Reminder dedupe
+  lastReminderKey?: string;
+  lastReminderSentAt?: Date;
+
   cost?: number;
   notes?: string;
   attachments?: string[];

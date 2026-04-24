@@ -1,85 +1,15 @@
 import { Router } from 'express';
-import logger from '../Utils/logger';
-import { runFeedingReminderSweep } from '../Workers/feedingReminder.worker';
+
+// Deprecated: Cron-triggered feeding reminders were for serverless hosting.
+// On Render, reminders run via BullMQ background workers + repeatable jobs.
 
 const router = Router();
 
-// Vercel Cron triggers a GET request and uses user-agent: vercel-cron/1.0
-// This endpoint allows Vercel Cron without hardcoding secrets in the repo.
-router.get('/feeding-reminders', async (req, res) => {
-  try {
-    const ua = String(req.headers['user-agent'] || '');
-    const isVercelCron = /vercel-cron\/1\.0/i.test(ua);
-
-    if (!isVercelCron) {
-      logger.warn('Cron endpoint forbidden (not vercel-cron)', {
-        path: req.path,
-        ua,
-        ip: req.ip,
-      });
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    logger.info('Cron feeding reminder sweep triggered', {
-      path: req.path,
-      ua,
-    });
-
-    const windowMinutes = Math.max(
-      1,
-      parseInt(process.env.FEEDING_REMINDER_WINDOW_MINUTES || '15', 10) || 15
-    );
-
-    const result = await runFeedingReminderSweep({
-      now: new Date(),
-      windowMinutes,
-      limit: 500,
-      source: 'cron',
-    });
-
-    return res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error(`Cron feeding reminder sweep failed: ${error.message}`);
-    return res.status(500).json({ success: false, message: 'Cron sweep failed' });
-  }
-});
-
-// Manual trigger (local/admin): /api/cron/feeding-reminders/:secret
-router.get('/feeding-reminders/:secret', async (req, res) => {
-  try {
-    const expected = (process.env.CRON_SECRET || '').trim();
-    const provided = String(req.params.secret || '').trim();
-
-    logger.info('Manual feeding reminder sweep triggered', {
-      path: req.path,
-      ua: String(req.headers['user-agent'] || ''),
-    });
-
-    if (!expected) {
-      return res.status(500).json({ success: false, message: 'CRON_SECRET is not configured' });
-    }
-
-    if (provided !== expected) {
-      return res.status(403).json({ success: false, message: 'Forbidden' });
-    }
-
-    const windowMinutes = Math.max(
-      1,
-      parseInt(process.env.FEEDING_REMINDER_WINDOW_MINUTES || '15', 10) || 15
-    );
-
-    const result = await runFeedingReminderSweep({
-      now: new Date(),
-      windowMinutes,
-      limit: 500,
-      source: 'cron',
-    });
-
-    return res.json({ success: true, data: result });
-  } catch (error: any) {
-    logger.error(`Cron feeding reminder sweep failed: ${error.message}`);
-    return res.status(500).json({ success: false, message: 'Cron sweep failed' });
-  }
+router.all('*', (req, res) => {
+  return res.status(410).json({
+    success: false,
+    message: 'Cron endpoints are disabled. Use BullMQ background workers on Render.',
+  });
 });
 
 export default router;
