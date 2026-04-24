@@ -91,6 +91,39 @@ export class LivestockFeedBreedingService {
       owner: new Types.ObjectId(data.userId),
       livestockId: data.livestockId ? new Types.ObjectId(String(data.livestockId)) : undefined
     });
+
+    // AUTO-CREATE SCHEDULE LOGIC
+    // If a scheduleType is provided (e.g. "morning"), ensure a schedule exists for this animal
+    if (data.scheduleType && data.livestockId) {
+      const existingSchedule = await LivestockFeedingSchedule.findOne({
+        livestockId: new Types.ObjectId(String(data.livestockId)),
+        scheduleType: data.scheduleType,
+        enabled: true
+      });
+
+      if (!existingSchedule) {
+        // Create a default schedule for this type
+        const defaultTimes: Record<string, string[]> = {
+          morning: ['08:00'],
+          afternoon: ['13:00'],
+          evening: ['18:00'],
+          ad_libitum: ['09:00']
+        };
+
+        await LivestockFeedingSchedule.create({
+          farmId: new Types.ObjectId(data.farmId),
+          owner: new Types.ObjectId(data.userId),
+          livestockId: new Types.ObjectId(String(data.livestockId)),
+          scheduleType: data.scheduleType,
+          timesOfDay: defaultTimes[data.scheduleType] || ['08:00'],
+          feedType: data.feedType,
+          feedBrand: data.feedBrand,
+          enabled: true,
+          timezone: 'Africa/Lagos' // Default project timezone
+        });
+      }
+    }
+
     return feeding;
   }
 
