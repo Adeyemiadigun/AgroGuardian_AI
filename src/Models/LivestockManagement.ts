@@ -19,7 +19,7 @@ const livestockFeedingSchema = new Schema<ILivestockFeeding>(
     },
 
     // Timing
-    feedingTime: { type: Date },
+    feedingTime: { type: Date, default: Date.now },
     intendedDurationDays: { 
       type: Number, 
       enum: [1, 7, 14, 30, 90],

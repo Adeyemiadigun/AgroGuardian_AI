@@ -1,7 +1,7 @@
 import { Worker, Job } from 'bullmq';
 import { redisConnection } from '../Config/redis';
 import { FEEDING_REMINDER_QUEUE } from '../Queues/feedingReminder.queue';
-import { LivestockFeedingSchedule } from '../Models/LivestockManagement';
+import { LivestockFeedingSchedule, LivestockFeeding } from '../Models/LivestockManagement';
 import logger from '../Utils/logger';
 import { sendFeedingReminderEmail, sendFeedingReminderSMS } from '../Services/email.service';
 import { createNotification } from '../Services/notification.service';
@@ -35,7 +35,6 @@ const getLocalTimeHHmm = (d: Date, timeZone: string) => {
 
 const getLocalDateKey = (d: Date, timeZone: string) => {
   try {
-    // en-CA => YYYY-MM-DD
     return new Intl.DateTimeFormat('en-CA', {
       timeZone,
       year: 'numeric',
@@ -101,10 +100,24 @@ export const initFeedingReminderWorker = () => {
         if (nowMin === null) continue;
 
         const owner: any = (schedule as any).owner;
-        const toEmail = owner?.email;
-        const phoneNumber = owner?.phoneNumber;
         const ownerId = owner?._id?.toString?.();
         if (!ownerId) continue;
+
+        // SKIP if already fed in last 4 hours
+        const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+        const alreadyFed = await LivestockFeeding.findOne({
+          farmId: (schedule as any).farmId?._id,
+          livestockId: (schedule as any).livestockId?._id,
+          feedingTime: { $gte: fourHoursAgo }
+        }).lean();
+
+        if (alreadyFed) {
+          logger.debug(`Skipping reminder for ${owner.email} - record exists in last 4h`);
+          continue;
+        }
+
+        const toEmail = owner?.email;
+        const phoneNumber = owner?.phoneNumber;
 
         const farmName = (schedule as any).farmId?.name;
         const farmId = (schedule as any).farmId?._id?.toString?.();
@@ -131,7 +144,7 @@ export const initFeedingReminderWorker = () => {
           // In-app notification
           await createNotification(ownerId, title, message, 'system', link);
 
-          // Email (best-effort)
+          // Email
           if (toEmail) {
             await sendFeedingReminderEmail(toEmail, {
               time: t,
@@ -141,7 +154,7 @@ export const initFeedingReminderWorker = () => {
             });
           }
 
-          // SMS (best-effort)
+          // SMS
           if (phoneNumber) {
             try {
               await sendFeedingReminderSMS(phoneNumber, {
@@ -160,7 +173,6 @@ export const initFeedingReminderWorker = () => {
         }
 
         if (touched) {
-          // keep last 50 keys
           (schedule as any).lastReminderKeys = lastKeys.slice(-50);
           await (schedule as any).save();
           schedulesUpdated++;

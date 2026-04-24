@@ -166,6 +166,11 @@ export class LivestockFeedBreedingService {
     dailyAverage: number;
     byFeedType: { feedType: string; quantity: number; cost: number }[];
     bySpecies: { species: string; quantity: number; cost: number }[];
+    runway?: {
+      remainingDays: number;
+      exhaustionDate: Date;
+      status: 'healthy' | 'warning' | 'critical';
+    };
   }> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
@@ -204,6 +209,30 @@ export class LivestockFeedBreedingService {
       { $project: { feedType: '$_id', quantity: 1, cost: 1, _id: 0 } }
     ]);
 
+    // Calculate Feed Runway
+    // Logic: Look at the most recent record with a duration > 1
+    const lastAllocation = await LivestockFeeding.findOne({ 
+      farmId: new Types.ObjectId(farmId),
+      intendedDurationDays: { $gt: 1 } 
+    }).sort({ feedingTime: -1 });
+
+    let runway;
+    if (lastAllocation && lastAllocation.feedingTime) {
+      const feedingTime = new Date(lastAllocation.feedingTime);
+      const duration = lastAllocation.intendedDurationDays || 1;
+      const exhaustionDate = new Date(feedingTime.getTime() + duration * 24 * 60 * 60 * 1000);
+      const now = new Date();
+      
+      const diffMs = exhaustionDate.getTime() - now.getTime();
+      const remainingDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+      runway = {
+        remainingDays: Math.max(0, remainingDays),
+        exhaustionDate,
+        status: (remainingDays > 5 ? 'healthy' : remainingDays > 2 ? 'warning' : 'critical') as 'healthy' | 'warning' | 'critical'
+      };
+    }
+
     const totalCost = stats[0]?.totalCost || 0;
     const totalQuantity = stats[0]?.totalQuantity || 0;
     const totalRecords = stats[0]?.totalRecords || 0;
@@ -214,7 +243,8 @@ export class LivestockFeedBreedingService {
       totalRecords,
       dailyAverage: days > 0 ? totalQuantity / days : 0,
       byFeedType,
-      bySpecies: [] // optional enhancement later (requires livestock join)
+      bySpecies: [],
+      runway
     };
   }
 
