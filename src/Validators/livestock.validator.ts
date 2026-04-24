@@ -218,6 +218,7 @@ const feedingScheduleBaseSchema = z.object({
   scheduleType: z.enum(["morning", "afternoon", "evening", "ad_libitum"]).optional(),
   feedType: z.string().max(200).optional(),
   feedBrand: z.string().max(100).optional(),
+  feedingRecordId: z.string().length(24).optional(),
   enabled: z.boolean().optional(),
   notes: z.string().max(500).optional(),
 });

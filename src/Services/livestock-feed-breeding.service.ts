@@ -152,11 +152,25 @@ export class LivestockFeedBreedingService {
   }
 
   async createFeedingSchedule(data: Partial<ILivestockFeedingSchedule> & { farmId: string; userId: string }): Promise<ILivestockFeedingSchedule> {
+    const updateData: any = { ...data };
+
+    if (data.feedingRecordId) {
+      const record = await LivestockFeeding.findById(data.feedingRecordId).lean();
+      if (record) {
+        updateData.feedType = record.feedType;
+        updateData.feedBrand = record.feedBrand;
+        // If animal not selected on schedule, use the one from the record
+        if (!updateData.livestockId && record.livestockId) {
+          updateData.livestockId = record.livestockId;
+        }
+      }
+    }
+
     const schedule = await LivestockFeedingSchedule.create({
-      ...data,
+      ...updateData,
       farmId: new Types.ObjectId(data.farmId),
       owner: new Types.ObjectId(data.userId),
-      livestockId: data.livestockId ? new Types.ObjectId(String(data.livestockId)) : undefined,
+      livestockId: updateData.livestockId ? new Types.ObjectId(String(updateData.livestockId)) : undefined,
     });
     return schedule;
   }

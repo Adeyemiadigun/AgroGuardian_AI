@@ -338,6 +338,7 @@ export interface ILivestockFeedingSchedule extends Document {
   scheduleType?: "morning" | "afternoon" | "evening" | "ad_libitum";
   feedType?: string;
   feedBrand?: string;
+  feedingRecordId?: ILivestockFeeding["_id"];
 
   enabled: boolean;
 

@@ -69,6 +69,7 @@ const livestockFeedingScheduleSchema = new Schema<ILivestockFeedingSchedule>(
 
     feedType: { type: String },
     feedBrand: { type: String },
+    feedingRecordId: { type: Schema.Types.ObjectId, ref: "LivestockFeeding" },
 
     enabled: { type: Boolean, default: true },
     lastReminderKeys: { type: [String], default: [] },
