@@ -157,6 +157,38 @@ export const sendVaccinationReminderEmail = async (
   await addEmailToQueue(email, subject, htmlContent);
 };
 
+export const sendDewormingReminderEmail = async (
+  email: string,
+  args: {
+    dueDate: Date;
+    productName: string;
+    farmName?: string;
+    livestockName?: string;
+  }
+): Promise<void> => {
+  const due = new Date(args.dueDate);
+  const dueText = Number.isNaN(due.getTime()) ? '' : due.toLocaleDateString();
+
+  const subject = `Deworming due${dueText ? `: ${dueText}` : ''} - ${args.productName}`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2d7a3a;">🪱 Deworming Reminder</h2>
+      <p>You have an upcoming deworming due.</p>
+      <div style="background: #f6ffed; border: 1px solid #b7eb8f; padding: 12px; border-radius: 8px; margin: 12px 0;">
+        <p style="margin: 0;"><strong>Product:</strong> ${args.productName}</p>
+        ${dueText ? `<p style="margin: 6px 0 0;"><strong>Due date:</strong> ${dueText}</p>` : ''}
+        ${args.farmName ? `<p style="margin: 6px 0 0;"><strong>Farm:</strong> ${args.farmName}</p>` : ''}
+        ${args.livestockName ? `<p style="margin: 6px 0 0;"><strong>Animal:</strong> ${args.livestockName}</p>` : ''}
+      </div>
+      <p>Open AgroGuardian to record the deworming when completed.</p>
+      <p style="color: #999; font-size: 12px;">You can manage your livestock health records in the app.</p>
+    </div>
+  `;
+
+  await addEmailToQueue(email, subject, htmlContent);
+};
+
 export const sendFeedingReminderEmail = async (
   email: string,
   args: {

@@ -599,6 +599,11 @@ export interface ILivestockDeworming extends Document {
   dateAdministered: Date;
   administeredBy?: IUser["_id"];
   nextDueDate?: Date;
+
+  // Reminder dedupe
+  lastReminderKey?: string;
+  lastReminderSentAt?: Date;
+
   targetParasites?: string[];
   cost?: number;
   notes?: string;

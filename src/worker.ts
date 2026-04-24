@@ -22,6 +22,8 @@ import { initFeedingReminderWorker } from './Workers/feedingReminder.worker';
 import { initFeedingReminderSchedule } from './Queues/feedingReminder.queue';
 import { initVaccinationReminderWorker } from './Workers/vaccinationReminder.worker';
 import { initVaccinationReminderSchedule } from './Queues/vaccinationReminder.queue';
+import { initDewormingReminderWorker } from './Workers/dewormingReminder.worker';
+import { initDewormingReminderSchedule } from './Queues/dewormingReminder.queue';
 
 const main = async () => {
   await connectDB();
@@ -48,6 +50,7 @@ const main = async () => {
     initCarbonAccrualWorker(),
     initFeedingReminderWorker(),
     initVaccinationReminderWorker(),
+    initDewormingReminderWorker(),
   ];
 
   const weatherSyncInterval = (process.env.WEATHER_SYNC_INTERVAL || '6-hourly') as any;
@@ -61,6 +64,9 @@ const main = async () => {
 
   const vaccinationReminderInterval = (process.env.VACCINATION_REMINDER_INTERVAL || 'hourly') as any;
   await initVaccinationReminderSchedule(vaccinationReminderInterval);
+
+  const dewormingReminderInterval = (process.env.DEWORMING_REMINDER_INTERVAL || 'hourly') as any;
+  await initDewormingReminderSchedule(dewormingReminderInterval);
 
   logger.info('Background workers started', { workerCount: workers.length });
 

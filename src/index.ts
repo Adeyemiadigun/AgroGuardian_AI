@@ -44,6 +44,8 @@ import { initFeedingReminderWorker } from './Workers/feedingReminder.worker';
 import { initFeedingReminderSchedule } from './Queues/feedingReminder.queue';
 import { initVaccinationReminderWorker } from './Workers/vaccinationReminder.worker';
 import { initVaccinationReminderSchedule } from './Queues/vaccinationReminder.queue';
+import { initDewormingReminderWorker } from './Workers/dewormingReminder.worker';
+import { initDewormingReminderSchedule } from './Queues/dewormingReminder.queue';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -81,6 +83,10 @@ if (runWorkers) {
   initVaccinationReminderWorker();
   const vaccinationReminderInterval = (process.env.VACCINATION_REMINDER_INTERVAL || 'hourly') as any;
   initVaccinationReminderSchedule(vaccinationReminderInterval);
+
+  initDewormingReminderWorker();
+  const dewormingReminderInterval = (process.env.DEWORMING_REMINDER_INTERVAL || 'hourly') as any;
+  initDewormingReminderSchedule(dewormingReminderInterval);
 } else {
   logger.warn('Queue workers are disabled (RUN_WORKERS=false or QUEUE_MODE=inline).');
 }

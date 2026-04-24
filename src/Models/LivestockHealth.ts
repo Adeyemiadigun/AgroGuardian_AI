@@ -315,6 +315,11 @@ const dewormingSchema = new Schema({
   dateAdministered: { type: Date, required: true },
   administeredBy: { type: Schema.Types.ObjectId, ref: "User" },
   nextDueDate: { type: Date },
+
+  // Reminder dedupe (prevents repeated emails/notifications for the same due date)
+  lastReminderKey: { type: String },
+  lastReminderSentAt: { type: Date },
+
   targetParasites: [{ type: String }],
   cost: { type: Number },
   notes: { type: String }
