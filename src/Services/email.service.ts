@@ -39,8 +39,8 @@ export const sendBrevoSMS = async (
   content: string
 ): Promise<void> => {
   if (!BREVO_API_KEY) {
-    logger.warn("BREVO_API_KEY is not set. SMS sending skipped.");
-    return;
+    logger.error('BREVO_API_KEY is not set. Cannot send SMS.');
+    throw new Error('BREVO_API_KEY is not set');
   }
 
   // Normalize phone number: Brevo expects digits only for recipient (international format without +)
@@ -86,7 +86,8 @@ export const sendBrevoSMS = async (
       throw new Error(`Failed to send SMS: ${response.statusText}`);
     }
 
-    logger.info(`SMS sent successfully to ${normalizedRecipient}`);
+    const masked = normalizedRecipient.length <= 4 ? '****' : `***${normalizedRecipient.slice(-4)}`;
+    logger.info(`SMS sent successfully to ${masked}`);
   } catch (error: any) {
     logger.error(`Error in sendBrevoSMS: ${error.message}`);
     throw error;

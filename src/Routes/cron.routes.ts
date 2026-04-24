@@ -12,8 +12,18 @@ router.get('/feeding-reminders', async (req, res) => {
     const isVercelCron = /vercel-cron\/1\.0/i.test(ua);
 
     if (!isVercelCron) {
+      logger.warn('Cron endpoint forbidden (not vercel-cron)', {
+        path: req.path,
+        ua,
+        ip: req.ip,
+      });
       return res.status(403).json({ success: false, message: 'Forbidden' });
     }
+
+    logger.info('Cron feeding reminder sweep triggered', {
+      path: req.path,
+      ua,
+    });
 
     const windowMinutes = Math.max(
       1,
@@ -39,6 +49,11 @@ router.get('/feeding-reminders/:secret', async (req, res) => {
   try {
     const expected = (process.env.CRON_SECRET || '').trim();
     const provided = String(req.params.secret || '').trim();
+
+    logger.info('Manual feeding reminder sweep triggered', {
+      path: req.path,
+      ua: String(req.headers['user-agent'] || ''),
+    });
 
     if (!expected) {
       return res.status(500).json({ success: false, message: 'CRON_SECRET is not configured' });
