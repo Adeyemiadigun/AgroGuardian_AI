@@ -38,25 +38,41 @@ export const sendBrevoSMS = async (
   to: string,
   content: string
 ): Promise<void> => {
-  const response = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
-    method: "POST",
-    headers: {
-      accept: "application/json",
-      "api-key": BREVO_API_KEY,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      type: "transactional",
-      sender: "AgroGuard",
-      recipient: to,
-      content,
-    }),
-  });
+  if (!BREVO_API_KEY) {
+    logger.warn("BREVO_API_KEY is not set. SMS sending skipped.");
+    return;
+  }
 
-  if (!response.ok) {
-    const error = await response.text();
-    logger.error(`Brevo SMS API error: ${error}`);
-    throw new Error("Failed to send SMS");
+  // Normalize phone number: Brevo expects digits only for recipient (international format without +)
+  const normalizedRecipient = to.replace(/\D/g, "");
+
+  try {
+    const response = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "api-key": BREVO_API_KEY,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "transactional",
+        sender: "AgroGuard", // Max 11 alphanumeric characters
+        recipient: normalizedRecipient,
+        content,
+        unicodeEnabled: true,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.text();
+      logger.error(`Brevo SMS API error: ${response.status} - ${errorData}`);
+      throw new Error(`Failed to send SMS: ${response.statusText}`);
+    }
+
+    logger.info(`SMS sent successfully to ${normalizedRecipient}`);
+  } catch (error: any) {
+    logger.error(`Error in sendBrevoSMS: ${error.message}`);
+    throw error;
   }
 };
 
