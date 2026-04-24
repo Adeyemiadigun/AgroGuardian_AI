@@ -305,7 +305,8 @@ export interface ILivestockFeeding extends Document {
   unit: "kg" | "lbs" | "bags" | "liters";
 
   // When
-  feedingTime: Date;
+  feedingTime?: Date;
+  intendedDurationDays?: number;
   scheduleType?: "morning" | "afternoon" | "evening" | "ad_libitum";
 
   // Cost tracking

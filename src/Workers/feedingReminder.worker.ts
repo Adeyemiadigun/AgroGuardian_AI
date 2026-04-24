@@ -3,7 +3,7 @@ import { redisConnection } from '../Config/redis';
 import { FEEDING_REMINDER_QUEUE } from '../Queues/feedingReminder.queue';
 import { LivestockFeedingSchedule } from '../Models/LivestockManagement';
 import logger from '../Utils/logger';
-import { sendFeedingReminderEmail } from '../Services/email.service';
+import { sendFeedingReminderEmail, sendFeedingReminderSMS } from '../Services/email.service';
 import { createNotification } from '../Services/notification.service';
 
 const WEEKDAY_MAP: Record<string, number> = {
@@ -78,7 +78,7 @@ export const initFeedingReminderWorker = () => {
       const schedules = await LivestockFeedingSchedule.find({ enabled: true })
         .populate('farmId', 'name')
         .populate('livestockId', 'name tagId species')
-        .populate('owner', 'email firstName lastName')
+        .populate('owner', 'email firstName lastName phoneNumber')
         .limit(500);
 
       let remindersSent = 0;
@@ -102,6 +102,7 @@ export const initFeedingReminderWorker = () => {
 
         const owner: any = (schedule as any).owner;
         const toEmail = owner?.email;
+        const phoneNumber = owner?.phoneNumber;
         const ownerId = owner?._id?.toString?.();
         if (!ownerId) continue;
 
@@ -138,6 +139,19 @@ export const initFeedingReminderWorker = () => {
               farmName,
               livestockName,
             });
+          }
+
+          // SMS (best-effort)
+          if (phoneNumber) {
+            try {
+              await sendFeedingReminderSMS(phoneNumber, {
+                time: t,
+                farmName,
+                livestockName,
+              });
+            } catch (err: any) {
+              logger.error(`Failed to send feeding SMS to ${phoneNumber}: ${err.message}`);
+            }
           }
 
           lastKeys.push(reminderKey);

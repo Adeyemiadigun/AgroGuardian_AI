@@ -166,3 +166,16 @@ export const sendFeedingReminderEmail = async (
 
   await addEmailToQueue(email, subject, htmlContent);
 };
+
+export const sendFeedingReminderSMS = async (
+  phoneNumber: string,
+  args: {
+    time: string;
+    farmName?: string;
+    livestockName?: string;
+  }
+): Promise<void> => {
+  const message = `AgroGuardian: Feeding Reminder! It's time (${args.time}) to feed${args.farmName ? ` at ${args.farmName}` : ''}${args.livestockName ? ` for ${args.livestockName}` : ''}. Open the app to log it.`;
+  
+  await sendBrevoSMS(phoneNumber, message);
+};
