@@ -1,9 +1,11 @@
 import CropDiagnosis from '../Models/CropDiagnosis';
 import DiagnosisChat from '../Models/DiagnosisChat';
 import Farm from '../Models/Farm';
+import User from '../Models/User';
 import logger from '../Utils/logger';
 import { analyzeCropImage, getModelName } from '../Utils/geminiClient';
 import { addResilienceSyncJob } from '../Queues/resilience.queue';
+import { sendBrevoEmail } from './email.service';
 
 export type CropDiagnosisJobData = {
   diagnosisId: string;
@@ -93,6 +95,23 @@ export const processCropDiagnosisJob = async (data: CropDiagnosisJobData) => {
       userId,
       messages: [{ role: 'assistant', content: initialMessage, timestamp: new Date() }],
     });
+
+    // Send email for critical cases
+    if (aiResult.severity === 'critical' || aiResult.urgency === 'immediate') {
+      const user = await User.findById(userId);
+      if (user) {
+        await sendBrevoEmail(
+          user.email,
+          '🚨 Urgent: Critical Crop Health Alert',
+          `<h2>Critical Crop Health Alert</h2>
+          <p>Your ${cropType} requires immediate attention.</p>
+          <p><strong>Diagnosis:</strong> ${aiResult.diagnosis}</p>
+          <p><strong>Severity:</strong> ${aiResult.severity}</p>
+          <p><strong>Urgency:</strong> ${aiResult.urgency}</p>
+          <a href="${process.env.FRONTEND_URL}/diagnosis?farmId=${farmId}">View Full Diagnosis</a>`
+        );
+      }
+    }
 
     // Non-critical: try to sync resilience, but don't fail the diagnosis if it can't queue.
     try {

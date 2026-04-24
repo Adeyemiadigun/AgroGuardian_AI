@@ -1,7 +1,29 @@
 import { Request, Response } from "express";
 import { AuthRequest, IUser } from "../Types/auth.types";
-import {  registerUser,  verifyUserEmail,  loginUser,  refreshUserToken, forgotUserPassword,  resetUserPassword,  logoutUser, googleLogin,} from "../Services/auth.service";
+import {  registerUser,  verifyUserEmail,  loginUser,  refreshUserToken, forgotUserPassword,  resetUserPassword,  logoutUser, googleLogin, getProfile as getProfileService, updateProfile as updateProfileService } from "../Services/auth.service";
 import logger from "../Utils/logger";
+
+export const getProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const user = await getProfileService(userId);
+    res.status(200).json({ success: true, data: user });
+  } catch (error: any) {
+    logger.error("Get profile error", error);
+    res.status(404).json({ success: false, message: error.message || "User not found" });
+  }
+};
+
+export const updateProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user!.userId;
+    const user = await updateProfileService(userId, req.body);
+    res.status(200).json({ success: true, message: "Profile updated successfully", data: user });
+  } catch (error: any) {
+    logger.error("Update profile error", error);
+    res.status(400).json({ success: false, message: error.message || "Profile update failed" });
+  }
+};
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {

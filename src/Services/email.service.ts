@@ -34,6 +34,32 @@ export const sendBrevoEmail = async (
   }
 };
 
+export const sendBrevoSMS = async (
+  to: string,
+  content: string
+): Promise<void> => {
+  const response = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "api-key": BREVO_API_KEY,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      type: "transactional",
+      sender: "AgroGuard",
+      recipient: to,
+      content,
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    logger.error(`Brevo SMS API error: ${error}`);
+    throw new Error("Failed to send SMS");
+  }
+};
+
 export const sendVerificationEmail = async (
   email: string,
   token: string

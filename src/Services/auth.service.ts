@@ -266,3 +266,26 @@ export const googleLogin = async (user: IUser) => {
     },
   };
 };
+
+export const getProfile = async (userId: string) => {
+  const user = await User.findById(userId).select("-password -emailVerificationToken -emailVerificationTokenExpires -passwordResetToken -passwordResetTokenExpires");
+  if (!user) {
+    throw new Error("User not found");
+  }
+  return user;
+};
+
+export const updateProfile = async (userId: string, data: { firstName?: string, lastName?: string, phoneNumber?: string, profilePicture?: string }) => {
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { $set: data },
+    { new: true, runValidators: true }
+  ).select("-password -emailVerificationToken -emailVerificationTokenExpires -passwordResetToken -passwordResetTokenExpires");
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  logger.info(`Profile updated for user: ${user.email}`);
+  return user;
+};

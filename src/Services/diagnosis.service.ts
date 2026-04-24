@@ -62,6 +62,18 @@ export const diagnoseCrop = async (
     userId
   });
 
+  const user = await User.findById(userId);
+  if (user) {
+    await sendBrevoEmail(
+      user.email,
+      "🔍 Crop Diagnosis Initiated",
+      `<h2>Diagnosis in Progress</h2>
+      <p>Your ${cropType} diagnosis for farm ${farm.name} has been received and is being analyzed by our AI.</p>
+      <p>You will receive another alert if any critical issues are detected.</p>
+      <a href="${process.env.FRONTEND_URL}/diagnosis?farmId=${farmId}">Track Progress</a>`
+    );
+  }
+
   logger.info(`Multi-image diagnosis initiated for farm ${farmId}. Status: processing.`);
 
   return diagnosis;
@@ -108,14 +120,6 @@ export const updateDiagnosisStatus = async (
       "treatment",
       `/diagnosis?farmId=${diagnosis.farmId}`
     );
-
-    if (status === "resolved") {
-      await sendBrevoEmail(
-        user.email,
-        "🌱 Good News: Crop Health Resolved!",
-        `<h2>Success!</h2><p>Your ${diagnosis.cropType} diagnosis has been marked as resolved. Keep up the good work!</p>`
-      );
-    }
   }
 
   logger.info(`Diagnosis ${diagnosisId} status updated to ${status}`);

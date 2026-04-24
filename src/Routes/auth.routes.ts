@@ -9,6 +9,8 @@ import {
   resetPassword,
   logout,
   googleCallback,
+  getProfile,
+  updateProfile,
 } from "../Controllers/auth.controller";
 import { authenticate } from "../Middlewares/auth.middleware";
 import { validate } from "../Middlewares/validate.middleware";
@@ -28,6 +30,9 @@ router.post("/refresh-token", refreshToken);
 router.post("/forgot-password", validate(forgotPasswordSchema), forgotPassword);
 router.post("/reset-password", validate(resetPasswordSchema), resetPassword);
 router.post("/logout", authenticate as any, logout as any);
+
+router.get("/profile", authenticate as any, getProfile as any);
+router.patch("/profile", authenticate as any, updateProfile as any);
 
 router.get(
   "/google",
