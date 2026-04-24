@@ -44,7 +44,24 @@ export const sendBrevoSMS = async (
   }
 
   // Normalize phone number: Brevo expects digits only for recipient (international format without +)
-  const normalizedRecipient = to.replace(/\D/g, "");
+  let normalizedRecipient = to.replace(/\D/g, "");
+
+  // Convert 00-prefixed international numbers (e.g. 00234...) -> 234...
+  if (normalizedRecipient.startsWith('00')) {
+    normalizedRecipient = normalizedRecipient.slice(2);
+  }
+
+  // Optional: help local numbers by injecting a default country code.
+  // Example: if user stored 08012345678 and SMS_DEFAULT_COUNTRY_CODE=234 => 2348012345678
+  const defaultCc = (process.env.SMS_DEFAULT_COUNTRY_CODE || '').replace(/\D/g, '');
+  if (defaultCc && normalizedRecipient.length >= 10 && normalizedRecipient.startsWith('0')) {
+    normalizedRecipient = `${defaultCc}${normalizedRecipient.slice(1)}`;
+  }
+
+  if (normalizedRecipient.length < 8) {
+    logger.warn(`Invalid phone number for SMS (after normalization): ${to}`);
+    return;
+  }
 
   try {
     const response = await fetch("https://api.brevo.com/v3/transactionalSMS/sms", {

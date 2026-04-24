@@ -28,6 +28,7 @@ import livestockFeedBreedingRoutes from './Routes/livestock-feed-breeding.routes
 import livestockInventoryRoutes from './Routes/livestock-inventory.routes';
 import vetConsultationRoutes from './Routes/vet-consultation.routes';
 import livestockAlertsRoutes from './Routes/livestock-alerts.routes';
+import cronRoutes from './Routes/cron.routes';
 
 // Workers & Queues
 import { initResilienceWorker } from './Workers/resilience.worker';
@@ -51,9 +52,18 @@ connectDB()
 // Initialize Workers (BullMQ)
 // NOTE: BullMQ generates a lot of Redis commands; use QUEUE_MODE=inline for dev to avoid Upstash request caps.
 
-const runWorkers = process.env.RUN_WORKERS
+let runWorkers = process.env.RUN_WORKERS
   ? process.env.RUN_WORKERS === 'true'
   : isRedisQueueEnabled();
+
+// Serverless platforms (e.g., Vercel) cannot run always-on background workers.
+// Use a cron HTTP endpoint instead.
+if (process.env.VERCEL) {
+  if (runWorkers) {
+    logger.warn('RUN_WORKERS is enabled but this looks like Vercel. Background workers will be disabled; use /api/cron/* endpoints.');
+  }
+  runWorkers = false;
+}
 
 if (runWorkers) {
   initResilienceWorker();
@@ -87,6 +97,8 @@ app.use(cors({
 ));
 app.use(express.json());
 app.use(passport.initialize());
+
+app.use('/api/cron', cronRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/farms', farmRoutes);

@@ -50,60 +50,96 @@ export const getChatModelName = (): string => {
   return CHAT_MODEL;
 };
 
-// Helper to call API with automatic fallback
+// =============================================================================
+// Robust Fallback & Retry Logic (Same as geminiClient)
+// =============================================================================
+
+const shouldAttemptFallback = (error: any): boolean => {
+  const status = error?.status;
+  const code = error?.code;
+  // 402: Payment Required (credits), 404: Model not found, 429: Rate limit, 503: Service Unavailable
+  return status === 402 || status === 404 || status === 429 || status === 503 || code === 'model_not_found';
+};
+
+const getHeader = (headers: any, name: string): string | undefined => {
+  if (!headers) return undefined;
+  const key = String(name || '').toLowerCase();
+  for (const k of Object.keys(headers)) {
+    if (String(k).toLowerCase() === key) return headers[k];
+  }
+  return undefined;
+};
+
+const summarizeLlmError = (error: any) => {
+  const headers = error?.headers || error?.response?.headers;
+  const requestId = getHeader(headers, 'x-request-id') || getHeader(headers, 'cf-ray');
+  const providerMessage = error?.error?.message || error?.response?.data?.error?.message;
+
+  return {
+    status: error?.status,
+    code: error?.code,
+    message: error?.message,
+    providerMessage,
+    requestId,
+  };
+};
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const RETRY_MAX = Number(process.env.AI_RETRY_MAX || 2);
+const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 500);
+
 const callWithFallback = async (
   createCall: (model: string) => Promise<any>,
   primaryModel: string
 ): Promise<any> => {
-  try {
-    return await createCall(primaryModel);
-  } catch (error: any) {
-    const shouldTryFallback =
-      error?.status === 429 ||
-      error?.status === 503 ||
-      error?.status === 404 ||
-      error?.code === 'model_not_found';
+  for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
+    try {
+      return await createCall(primaryModel);
+    } catch (error: any) {
+      const summary = summarizeLlmError(error);
+      const isLastAttempt = attempt >= RETRY_MAX;
+      const retryable = error.status === 429 || error.status === 503;
 
-    if (!shouldTryFallback || FALLBACK_MODELS.length === 0) {
-      throw error;
-    }
-
-    let lastErr: any = error;
-    for (const fallbackModel of FALLBACK_MODELS) {
-      if (!fallbackModel || fallbackModel === primaryModel) continue;
-      try {
-        logger.warn(`Primary model failed; trying fallback ${fallbackModel}`);
-        return await createCall(fallbackModel);
-      } catch (fallbackError: any) {
-        lastErr = fallbackError;
-        logger.warn(`Fallback model failed; trying next (if any)`);
+      if (retryable && !isLastAttempt) {
+        const waitMs = Math.min(8000, RETRY_BASE_MS * Math.pow(2, attempt));
+        logger.warn('LLM primary model throttled; retrying', { primaryModel, attempt, waitMs, ...summary });
+        await sleep(waitMs);
+        continue;
       }
-    }
 
-    throw lastErr;
+      if (!shouldAttemptFallback(error) || FALLBACK_MODELS.length === 0) {
+        throw error;
+      }
+
+      logger.warn('Primary model failed; trying fallbacks', { primaryModel, fallbacks: FALLBACK_MODELS, ...summary });
+
+      let lastErr = error;
+      for (const fallbackModel of FALLBACK_MODELS) {
+        if (!fallbackModel || fallbackModel === primaryModel) continue;
+        try {
+          return await createCall(fallbackModel);
+        } catch (e: any) {
+          lastErr = e;
+          if (shouldAttemptFallback(e)) {
+            logger.warn('Fallback model failed; trying next', { fallbackModel, ...summarizeLlmError(e) });
+            continue;
+          }
+          throw e;
+        }
+      }
+      throw lastErr;
+    }
   }
 };
 
-// OpenRouter / OpenAI-compatible models may optionally return `reasoning_details`.
-// We keep this behind an env flag to avoid extra tokens/cost unless you want it.
+// =============================================================================
+// Features
+// =============================================================================
+
 const withReasoning = (params: any): any => {
-  const enabled = String(
-    process.env.AI_INCLUDE_REASONING ||
-      process.env.AI_WITH_REASONING ||
-      process.env.AI_REASONING ||
-      ''
-  ).toLowerCase() === 'true';
-
+  const enabled = String(process.env.AI_REASONING_ENABLED || '').toLowerCase() === 'true';
   if (!enabled) return params;
-
-  const effort = (process.env.AI_REASONING_EFFORT || 'low').toLowerCase();
-
-  return {
-    ...params,
-    // Different providers use different flags; sending both is harmless for OpenRouter.
-    include_reasoning: true,
-    reasoning: params?.reasoning ?? { effort },
-  };
+  return { ...params, include_reasoning: true };
 };
 
 const COMPARISON_PROMPT = `You are a strict agricultural auditor. You are comparing two photos of the same farm location: one taken at the START of a regenerative practice and one taken at the END.
@@ -153,6 +189,7 @@ export const verifyPracticeImage = async (
   const result = await callWithFallback(
     (model) => api.chat.completions.create({
       model,
+      max_tokens: VISION_MAX_TOKENS,
       messages: [
         { role: 'system', content: 'You are an agricultural verification assistant. Always respond with valid JSON only.' },
         {
@@ -180,6 +217,7 @@ export const comparePracticeImages = async (
   const result = await callWithFallback(
     (model) => api.chat.completions.create({
       model,
+      max_tokens: VISION_MAX_TOKENS,
       messages: [
         { role: 'system', content: 'You are a strict agricultural auditor. Always respond with valid JSON only.' },
         {

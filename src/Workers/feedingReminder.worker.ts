@@ -65,6 +65,141 @@ const toMinutes = (hhmm: string) => {
   return hh * 60 + mm;
 };
 
+export type FeedingReminderSweepResult = {
+  remindersSent: number;
+  schedulesUpdated: number;
+};
+
+export const runFeedingReminderSweep = async (opts: {
+  now: Date;
+  windowMinutes: number;
+  limit?: number;
+  source?: 'worker' | 'cron';
+}): Promise<FeedingReminderSweepResult> => {
+  const now = opts.now;
+  const windowMinutes = opts.windowMinutes;
+  const limit = opts.limit ?? 500;
+
+  const schedules = await LivestockFeedingSchedule.find({ enabled: true })
+    .populate('farmId', 'name')
+    .populate('livestockId', 'name tagId species')
+    .populate('owner', 'email firstName lastName phoneNumber')
+    .limit(limit);
+
+  let remindersSent = 0;
+  let schedulesUpdated = 0;
+
+  for (const schedule of schedules) {
+    try {
+      const tz = (schedule as any).timezone || 'Africa/Lagos';
+      const times: string[] = Array.isArray((schedule as any).timesOfDay) ? (schedule as any).timesOfDay : [];
+      if (!times.length) continue;
+
+      const dow = getLocalWeekday(now, tz);
+      const allowedDows: number[] | undefined = Array.isArray((schedule as any).daysOfWeek) && (schedule as any).daysOfWeek.length
+        ? (schedule as any).daysOfWeek
+        : undefined;
+      if (allowedDows && !allowedDows.includes(dow)) continue;
+
+      const dateKey = getLocalDateKey(now, tz);
+      const nowHHmm = getLocalTimeHHmm(now, tz);
+      const nowMin = toMinutes(nowHHmm);
+      if (nowMin === null) continue;
+
+      const owner: any = (schedule as any).owner;
+      const ownerId = owner?._id?.toString?.();
+      if (!ownerId) continue;
+
+      // SKIP if already fed in last 4 hours (only when schedule targets a specific animal)
+      const scheduleLivestockId = (schedule as any).livestockId?._id;
+      if (scheduleLivestockId) {
+        const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+        const alreadyFed = await LivestockFeeding.findOne({
+          farmId: (schedule as any).farmId?._id,
+          livestockId: scheduleLivestockId,
+          feedingTime: { $gte: fourHoursAgo }
+        }).lean();
+
+        if (alreadyFed) {
+          logger.debug(`Skipping reminder for ${owner.email} - record exists in last 4h`);
+          continue;
+        }
+      }
+
+      const toEmail = owner?.email;
+      const phoneNumber = owner?.phoneNumber;
+
+      const farmName = (schedule as any).farmId?.name;
+      const farmId = (schedule as any).farmId?._id?.toString?.();
+      const livestockName = (schedule as any).livestockId?.name || (schedule as any).livestockId?.tagId;
+
+      const lastKeys: string[] = Array.isArray((schedule as any).lastReminderKeys) ? (schedule as any).lastReminderKeys : [];
+      let touched = false;
+
+      for (const t of times) {
+        if (typeof t !== 'string' || !/^\d{2}:\d{2}$/.test(t)) continue;
+        const targetMin = toMinutes(t);
+        if (targetMin === null) continue;
+
+        const withinWindow = nowMin >= targetMin && nowMin < targetMin + windowMinutes;
+        if (!withinWindow) continue;
+
+        const reminderKey = `${dateKey}-${t}`;
+        if (lastKeys.includes(reminderKey)) continue;
+
+        const title = `Feeding reminder (${t})`;
+        const message = `It's time to feed${farmName ? ` at ${farmName}` : ''}${livestockName ? ` (${livestockName})` : ''}.`;
+        const link = farmId ? `/livestock/feeding?farmId=${farmId}` : undefined;
+
+        try {
+          await createNotification(ownerId, title, message, 'system', link);
+        } catch (err: any) {
+          logger.error(`Failed to create in-app feeding notification: ${err.message}`);
+        }
+
+        if (toEmail) {
+          try {
+            await sendFeedingReminderEmail(toEmail, {
+              time: t,
+              timezone: tz,
+              farmName,
+              livestockName,
+            });
+          } catch (err: any) {
+            logger.error(`Failed to queue feeding reminder email to ${toEmail}: ${err.message}`);
+          }
+        }
+
+        if (phoneNumber) {
+          try {
+            await sendFeedingReminderSMS(phoneNumber, {
+              time: t,
+              farmName,
+              livestockName,
+            });
+          } catch (err: any) {
+            logger.error(`Failed to send feeding SMS to ${phoneNumber}: ${err.message}`);
+          }
+        }
+
+        lastKeys.push(reminderKey);
+        remindersSent++;
+        touched = true;
+      }
+
+      if (touched) {
+        (schedule as any).lastReminderKeys = lastKeys.slice(-50);
+        await (schedule as any).save();
+        schedulesUpdated++;
+      }
+    } catch (err: any) {
+      logger.error(`Feeding reminder schedule sweep error: ${err.message}`);
+    }
+  }
+
+  return { remindersSent, schedulesUpdated };
+};
+
 export const initFeedingReminderWorker = () => {
   const worker = new Worker(
     FEEDING_REMINDER_QUEUE,
@@ -74,118 +209,19 @@ export const initFeedingReminderWorker = () => {
 
       logger.info('Feeding reminder sweep started', { jobId: job.id, windowMinutes });
 
-      const schedules = await LivestockFeedingSchedule.find({ enabled: true })
-        .populate('farmId', 'name')
-        .populate('livestockId', 'name tagId species')
-        .populate('owner', 'email firstName lastName phoneNumber')
-        .limit(500);
-
-      let remindersSent = 0;
-      let schedulesUpdated = 0;
-
-      for (const schedule of schedules) {
-        const tz = (schedule as any).timezone || 'Africa/Lagos';
-        const times: string[] = Array.isArray((schedule as any).timesOfDay) ? (schedule as any).timesOfDay : [];
-        if (!times.length) continue;
-
-        const dow = getLocalWeekday(now, tz);
-        const allowedDows: number[] | undefined = Array.isArray((schedule as any).daysOfWeek) && (schedule as any).daysOfWeek.length
-          ? (schedule as any).daysOfWeek
-          : undefined;
-        if (allowedDows && !allowedDows.includes(dow)) continue;
-
-        const dateKey = getLocalDateKey(now, tz);
-        const nowHHmm = getLocalTimeHHmm(now, tz);
-        const nowMin = toMinutes(nowHHmm);
-        if (nowMin === null) continue;
-
-        const owner: any = (schedule as any).owner;
-        const ownerId = owner?._id?.toString?.();
-        if (!ownerId) continue;
-
-        // SKIP if already fed in last 4 hours
-        const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
-        const alreadyFed = await LivestockFeeding.findOne({
-          farmId: (schedule as any).farmId?._id,
-          livestockId: (schedule as any).livestockId?._id,
-          feedingTime: { $gte: fourHoursAgo }
-        }).lean();
-
-        if (alreadyFed) {
-          logger.debug(`Skipping reminder for ${owner.email} - record exists in last 4h`);
-          continue;
-        }
-
-        const toEmail = owner?.email;
-        const phoneNumber = owner?.phoneNumber;
-
-        const farmName = (schedule as any).farmId?.name;
-        const farmId = (schedule as any).farmId?._id?.toString?.();
-        const livestockName = (schedule as any).livestockId?.name || (schedule as any).livestockId?.tagId;
-
-        const lastKeys: string[] = Array.isArray((schedule as any).lastReminderKeys) ? (schedule as any).lastReminderKeys : [];
-        let touched = false;
-
-        for (const t of times) {
-          if (typeof t !== 'string' || !/^\d{2}:\d{2}$/.test(t)) continue;
-          const targetMin = toMinutes(t);
-          if (targetMin === null) continue;
-
-          const withinWindow = nowMin >= targetMin && nowMin < targetMin + windowMinutes;
-          if (!withinWindow) continue;
-
-          const reminderKey = `${dateKey}-${t}`;
-          if (lastKeys.includes(reminderKey)) continue;
-
-          const title = `Feeding reminder (${t})`;
-          const message = `It's time to feed${farmName ? ` at ${farmName}` : ''}${livestockName ? ` (${livestockName})` : ''}.`;
-          const link = farmId ? `/livestock/feeding?farmId=${farmId}` : undefined;
-
-          // In-app notification
-          await createNotification(ownerId, title, message, 'system', link);
-
-          // Email
-          if (toEmail) {
-            await sendFeedingReminderEmail(toEmail, {
-              time: t,
-              timezone: tz,
-              farmName,
-              livestockName,
-            });
-          }
-
-          // SMS
-          if (phoneNumber) {
-            try {
-              await sendFeedingReminderSMS(phoneNumber, {
-                time: t,
-                farmName,
-                livestockName,
-              });
-            } catch (err: any) {
-              logger.error(`Failed to send feeding SMS to ${phoneNumber}: ${err.message}`);
-            }
-          }
-
-          lastKeys.push(reminderKey);
-          remindersSent++;
-          touched = true;
-        }
-
-        if (touched) {
-          (schedule as any).lastReminderKeys = lastKeys.slice(-50);
-          await (schedule as any).save();
-          schedulesUpdated++;
-        }
-      }
+      const result = await runFeedingReminderSweep({
+        now,
+        windowMinutes,
+        limit: 500,
+        source: 'worker',
+      });
 
       logger.info('Feeding reminder sweep completed', {
         jobId: job.id,
-        remindersSent,
-        schedulesUpdated,
+        ...result,
       });
 
-      return { remindersSent, schedulesUpdated };
+      return result;
     },
     {
       connection: redisConnection as any,
