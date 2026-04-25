@@ -43,9 +43,9 @@ export const getConsultationsController = async (req: AuthRequest, res: Response
   try {
     const farmId = (req.params.farmId as string);
     const userId = req.user!.userId as string;
-    const status = (String(req.query.status)) as "active" | "resolved" | "archived" | undefined;
+    const status = req.query.status as "active" | "resolved" | "archived" | undefined;
 
-    const consultations = await getConsultationsByFarm(farmId, userId, status as any);
+    const consultations = await getConsultationsByFarm(farmId, userId, status);
     res.status(200).json({
       success: true,
       message: "Consultations retrieved successfully",
@@ -135,7 +135,7 @@ export const updateStatusController = async (req: AuthRequest, res: Response): P
 export const getAllConsultationsController = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user!.userId as string;
-    const limit = parseInt((String(req.query.limit)) as string) || 20;
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 20;
 
     const consultations = await getAllUserConsultations(userId, limit);
     res.status(200).json({
