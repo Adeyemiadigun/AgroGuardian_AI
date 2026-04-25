@@ -116,6 +116,8 @@ export const loginUser = async (email: string, password: string) => {
       lastName: user.lastName,
       email: user.email,
       role: user.role,
+      profilePicture: user.profilePicture,
+      authProvider: user.authProvider,
     },
   };
 };
