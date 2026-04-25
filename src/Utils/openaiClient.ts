@@ -562,7 +562,7 @@ RESPONSE GUIDELINES:
 
 IMPORTANT: After your response, on a new line, provide a JSON summary:
 |||METADATA|||
-{"issueType": "disease|pest|nutrient|weather|general|none", "severity": "low|medium|high|critical|none", "suggestedTitle": "Brief 3-5 word title for this consultation"}`;
+{"issueType": "disease, pest, nutrient, weather, general, or none", "severity": "low, medium, high, critical, or none", "suggestedTitle": "Brief 3-5 word title for this consultation"}`;
 
   // Build message history with image support
   const messages: any[] = [
@@ -628,8 +628,24 @@ IMPORTANT: After your response, on a new line, provide a JSON summary:
     response = parts[0].trim();
     try {
       const metadata = extractJSON(parts[1].trim());
-      issueType = metadata.issueType !== 'none' ? metadata.issueType : undefined;
-      severity = metadata.severity !== 'none' ? metadata.severity : undefined;
+      
+      // Validate and sanitize issueType
+      const validIssueTypes = ["disease", "pest", "nutrient", "weather", "general"];
+      let rawIssueType = String(metadata.issueType || '').toLowerCase();
+      if (rawIssueType && rawIssueType !== 'none') {
+        // If AI returned a list (e.g. "disease|nutrient"), pick the first valid one
+        const candidates = rawIssueType.split(/[|,\s]+/).map(s => s.trim());
+        issueType = candidates.find(c => validIssueTypes.includes(c));
+      }
+
+      // Validate and sanitize severity
+      const validSeverities = ["low", "medium", "high", "critical"];
+      let rawSeverity = String(metadata.severity || '').toLowerCase();
+      if (rawSeverity && rawSeverity !== 'none') {
+        const candidates = rawSeverity.split(/[|,\s]+/).map(s => s.trim());
+        severity = candidates.find(c => validSeverities.includes(c));
+      }
+
       suggestedTitle = metadata.suggestedTitle;
     } catch (e) {
       logger.warn('Failed to parse consultation metadata');
