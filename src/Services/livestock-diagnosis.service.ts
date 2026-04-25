@@ -540,11 +540,14 @@ export class LivestockDiagnosisService {
   /**
    * Get diagnosis by ID
    */
+  private readonly diagnosisLivestockPopulateFields =
+    'name tagId species breed healthStatus imageUrls trackingType quantity batchId poultryType fishType';
+
   async getDiagnosis(diagnosisId: string, userId: string) {
     const diagnosis = await LivestockDiagnosis.findOne({
       _id: diagnosisId,
       userId: new Types.ObjectId(userId)
-    }).populate('livestockId', 'name tagId species breed healthStatus imageUrls');
+    }).populate('livestockId', this.diagnosisLivestockPopulateFields);
 
     if (!diagnosis) {
       throw new Error('Diagnosis not found');
@@ -581,6 +584,7 @@ export class LivestockDiagnosisService {
    */
   async getDiagnosesByLivestock(livestockId: string) {
     const diagnoses = await LivestockDiagnosis.find({ livestockId: new Types.ObjectId(livestockId) })
+      .populate('livestockId', this.diagnosisLivestockPopulateFields)
       .sort({ createdAt: -1 });
     return diagnoses.map(d => this.normalizeDiagnosisStatus(d as any));
   }
@@ -595,7 +599,7 @@ export class LivestockDiagnosisService {
     }
 
     const diagnoses = await LivestockDiagnosis.find(query)
-      .populate('livestockId', 'name tagId species breed healthStatus')
+      .populate('livestockId', this.diagnosisLivestockPopulateFields)
       .sort({ createdAt: -1 })
       .limit(options.limit || 50);
 
