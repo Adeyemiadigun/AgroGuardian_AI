@@ -2,6 +2,7 @@ import Evidence from "../Models/Evidence";
 import PracticeActivityLog from "../Models/PracticeActivityLogs";
 import FarmPractice from "../Models/FarmPractice";
 import Farm from "../Models/Farm";
+import CropSeason from "../Models/CropSeason";
 import { verifyPracticeImage, comparePracticeImages } from "../Utils/openaiClient";
 import logger from "../Utils/logger";
 import { calculateCarbonForActivity } from "./carbon.service";
@@ -118,13 +119,21 @@ export const verifyActivityEvidence = async (evidenceId: string, imageBuffer: Bu
           log.status = "completed";
           await log.save();
           
+          // Automate Season Harvest: If this was a "Harvesting" practice, mark the linked season as harvested
+          if (practice.name.toLowerCase() === "harvesting" && log.cropSeasonId) {
+            await CropSeason.findByIdAndUpdate(log.cropSeasonId, {
+              status: "harvested",
+              harvestDate: new Date()
+            });
+            logger.info(`AUTO_SEASON_SETTLEMENT: Season ${log.cropSeasonId} marked as harvested via completion of Harvesting practice.`);
+          }
+          
           // Store a final audit calculation, then mark all monthly accrual credits as verified.
           await calculateCarbonForActivity(log._id.toString());
 
           await backfillAccrualForPracticeLog(log._id.toString(), {
             targetStatus: "verified",
             isEstimated: false,
-            endOverride: new Date(log.endDate),
           });
 
           logger.info(`STRICT_SUCCESS: Activity ${log._id} verified and accrual credits verified.`);

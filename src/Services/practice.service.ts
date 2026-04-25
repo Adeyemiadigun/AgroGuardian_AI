@@ -403,6 +403,11 @@ const DEFAULT_NIGERIA_PRACTICES: Array<{
     description: "Grow crops between rows of trees/shrubs to reduce erosion and improve soil fertility over time.",
     category: "agroforestry",
   },
+  {
+    name: "Harvesting",
+    description: "Harvesting the crop at full maturity to ensure maximum yield and quality.",
+    category: "crop",
+  },
 ];
 
 let nigeriaPracticesSeeded = false;
@@ -762,8 +767,12 @@ export const completePracticeActivity = async (
     const rawDays = Math.floor((now.getTime() - planted.getTime()) / DAY_MS);
     const daysSincePlanted = Number.isFinite(rawDays) ? Math.max(0, rawDays) : NaN;
 
+    const practice = await FarmPractice.findById(activityLog.practiceId);
+    const practiceName = practice?.name || "Practice";
+    const isHarvesting = practiceName.toLowerCase() === "harvesting";
+
     const projectedHarvest = season.harvestDate ? new Date(season.harvestDate) : null;
-    if (projectedHarvest) {
+    if (projectedHarvest && isHarvesting) {
       const rawTotal = Math.floor((projectedHarvest.getTime() - planted.getTime()) / DAY_MS);
       const totalSeasonDays = Number.isFinite(rawTotal) ? rawTotal : NaN;
 
@@ -774,18 +783,20 @@ export const completePracticeActivity = async (
       }
     }
 
-    if (!Number.isFinite(daysSincePlanted)) {
-      logger.warn("Invalid plantedDate for crop season; skipping maturity gate", { cropSeasonId: String(season._id) });
-    } else if (daysSincePlanted < maturity.minDays) {
-      const remaining = Math.max(0, maturity.minDays - daysSincePlanted);
-      throw new Error(
-        `Too early to upload completion evidence. ${crop.name} needs at least ${maturity.minDays} days from season start (current: ${daysSincePlanted} days). Wait ~${remaining} more days.`
-      );
+    if (isHarvesting) {
+      if (!Number.isFinite(daysSincePlanted)) {
+        logger.warn("Invalid plantedDate for crop season; skipping maturity gate", { cropSeasonId: String(season._id) });
+      } else if (daysSincePlanted < maturity.minDays) {
+        const remaining = Math.max(0, maturity.minDays - daysSincePlanted);
+        throw new Error(
+          `Too early to upload completion evidence for harvesting. ${crop.name} needs at least ${maturity.minDays} days from season start (current: ${daysSincePlanted} days). Wait ~${remaining} more days.`
+        );
+      }
     }
   }
 
-  const practice = await FarmPractice.findById(activityLog.practiceId);
-  const practiceName = practice?.name || "Practice";
+  const practiceForName = await FarmPractice.findById(activityLog.practiceId);
+  const practiceName = practiceForName?.name || "Practice";
 
   // Upload End Evidence
   try {
@@ -871,16 +882,21 @@ export const getFarmActivities = async (farmId: string, userId: string) => {
     const rawToHarvest = projectedHarvest ? Math.ceil((projectedHarvest.getTime() - now.getTime()) / DAY_MS) : null;
     const daysToProjectedHarvest = rawToHarvest != null && Number.isFinite(rawToHarvest) ? rawToHarvest : null;
 
+    const practiceName = a.practiceId?.name || "";
+    const isHarvesting = practiceName.toLowerCase() === "harvesting";
+
     let blockedReason: string | null = null;
-    if (totalSeasonDays != null && totalSeasonDays < maturity.minDays) {
-      blockedReason = `Projected harvest date is too early for ${crop.name}. Season is ~${totalSeasonDays} day(s), but minimum maturity is ${maturity.minDays} day(s). Please edit the season harvest date.`;
-    } else if (daysSincePlanted < maturity.minDays) {
-      const remaining = Math.max(0, maturity.minDays - daysSincePlanted);
-      blockedReason = `Too early to upload completion evidence. Wait ~${remaining} more day(s) for crop maturity.`;
+    if (isHarvesting) {
+      if (totalSeasonDays != null && totalSeasonDays < maturity.minDays) {
+        blockedReason = `Projected harvest date is too early for ${crop.name}. Season is ~${totalSeasonDays} day(s), but minimum maturity is ${maturity.minDays} day(s). Please edit the season harvest date.`;
+      } else if (daysSincePlanted < maturity.minDays) {
+        const remaining = Math.max(0, maturity.minDays - daysSincePlanted);
+        blockedReason = `Too early to upload completion evidence for harvesting. Wait ~${remaining} more day(s) for crop maturity.`;
+      }
     }
 
-    const isMatured = blockedReason == null && daysSincePlanted >= maturity.minDays;
-    const remainingDaysToMin = Math.max(0, maturity.minDays - daysSincePlanted);
+    const isMatured = !isHarvesting || (blockedReason == null && daysSincePlanted >= maturity.minDays);
+    const remainingDaysToMin = isHarvesting ? Math.max(0, maturity.minDays - daysSincePlanted) : 0;
 
     return {
       ...a,
