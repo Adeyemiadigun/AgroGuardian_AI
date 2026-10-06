@@ -1,16 +1,13 @@
-import { Worker, Job } from 'bullmq';
-import { redisConnection } from '../Config/redis';
-import { DEWORMING_REMINDER_QUEUE } from '../Queues/dewormingReminder.queue';
-import { LivestockDeworming } from '../Models/LivestockHealth';
+import { LivestockVaccination } from '../Models/LivestockHealth';
 import logger from '../Utils/logger';
 import { createNotification } from '../Services/notification.service';
-import { sendDewormingReminderEmail } from '../Services/email.service';
+import { sendVaccinationReminderEmail } from '../Services/email.service';
 
-export type DewormingReminderSweepResult = {
+export type VaccinationReminderSweepResult = {
   remindersSent: number;
-  dewormingsScanned: number;
-  dewormingsMatched: number;
-  dewormingsUpdated: number;
+  vaccinationsScanned: number;
+  vaccinationsMatched: number;
+  vaccinationsUpdated: number;
   skips: Record<string, number>;
   email: { attempted: number; queued: number; failed: number; missingEmail: number };
   notifications: { attempted: number; created: number; failed: number };
@@ -18,16 +15,16 @@ export type DewormingReminderSweepResult = {
 
 const getAnimalName = (livestock: any) => livestock?.name || livestock?.tagId || 'Animal';
 
-export const runDewormingReminderSweep = async (opts: {
+export const runVaccinationReminderSweep = async (opts: {
   now: Date;
   limit?: number;
-}): Promise<DewormingReminderSweepResult> => {
+}): Promise<VaccinationReminderSweepResult> => {
   const now = opts.now;
   const limit = opts.limit ?? 500;
 
-  const daysAhead = Math.max(0, parseInt(process.env.DEWORMING_REMINDER_DAYS_AHEAD || '0', 10) || 0);
-  const windowHours = Math.max(1, parseInt(process.env.DEWORMING_REMINDER_WINDOW_HOURS || '24', 10) || 24);
-  const verbose = process.env.DEWORMING_REMINDER_DEBUG === 'true';
+  const daysAhead = Math.max(0, parseInt(process.env.VACCINATION_REMINDER_DAYS_AHEAD || '0', 10) || 0);
+  const windowHours = Math.max(1, parseInt(process.env.VACCINATION_REMINDER_WINDOW_HOURS || '24', 10) || 24);
+  const verbose = process.env.VACCINATION_REMINDER_DEBUG === 'true';
 
   const msAhead = daysAhead * 24 * 60 * 60 * 1000;
   const upper = new Date(now.getTime() + msAhead);
@@ -43,7 +40,7 @@ export const runDewormingReminderSweep = async (opts: {
   const email = { attempted: 0, queued: 0, failed: 0, missingEmail: 0 };
   const notifications = { attempted: 0, created: 0, failed: 0 };
 
-  logger.info('Deworming reminder sweep started', {
+  logger.info('Vaccination reminder sweep started', {
     now: now.toISOString(),
     daysAhead,
     windowHours,
@@ -52,7 +49,7 @@ export const runDewormingReminderSweep = async (opts: {
     limit,
   });
 
-  const dewormings = await LivestockDeworming.find({
+  const vaccinations = await LivestockVaccination.find({
     nextDueDate: { $exists: true, $ne: null, $gt: lower, $lte: upper },
   })
     .populate({
@@ -69,27 +66,27 @@ export const runDewormingReminderSweep = async (opts: {
     .limit(limit);
 
   let remindersSent = 0;
-  let dewormingsScanned = 0;
-  let dewormingsMatched = 0;
-  let dewormingsUpdated = 0;
+  let vaccinationsScanned = 0;
+  let vaccinationsMatched = 0;
+  let vaccinationsUpdated = 0;
 
-  for (const d of dewormings) {
-    dewormingsScanned++;
+  for (const v of vaccinations) {
+    vaccinationsScanned++;
 
-    const due = (d as any).nextDueDate ? new Date((d as any).nextDueDate) : null;
+    const due = (v as any).nextDueDate ? new Date((v as any).nextDueDate) : null;
     if (!due || Number.isNaN(due.getTime())) {
       skips.missingDueDate++;
       continue;
     }
 
     const reminderKey = `${due.toISOString()}|ahead=${daysAhead}`;
-    if ((d as any).lastReminderKey === reminderKey) {
+    if ((v as any).lastReminderKey === reminderKey) {
       skips.alreadyReminded++;
       continue;
     }
 
-    const farm: any = (d as any).farmId;
-    const livestock: any = (d as any).livestockId;
+    const farm: any = (v as any).farmId;
+    const livestock: any = (v as any).livestockId;
     const farmOwner: any = farm?.owner;
     const livestockOwner: any = livestock?.owner;
 
@@ -104,20 +101,20 @@ export const runDewormingReminderSweep = async (opts: {
     const farmId = farm?._id?.toString?.();
     const farmName = farm?.name;
     const animalName = getAnimalName(livestock);
-    const productName = String((d as any).productName || 'deworming');
+    const vaccineName = String((v as any).vaccineName || 'vaccination');
 
     const dueText = due.toLocaleDateString();
-    const title = 'Deworming reminder';
-    const message = `${animalName} is due for deworming (${productName}) on ${dueText}.`;
+    const title = 'Vaccination reminder';
+    const message = `${animalName} is due for ${vaccineName} on ${dueText}.`;
     const link = livestockId ? `/livestock/${livestockId}` : (farmId ? `/livestock?farmId=${farmId}` : undefined);
 
     if (verbose) {
-      logger.info('Deworming reminder matched', {
-        dewormingId: (d as any)._id?.toString?.(),
+      logger.info('Vaccination reminder matched', {
+        vaccinationId: (v as any)._id?.toString?.(),
         ownerEmail: owner?.email,
         farmName,
         livestockId,
-        productName,
+        vaccineName,
         due: due.toISOString(),
       });
     }
@@ -128,84 +125,56 @@ export const runDewormingReminderSweep = async (opts: {
       notifications.created++;
     } catch (err: any) {
       notifications.failed++;
-      logger.error(`Failed to create deworming notification: ${err.message}`);
+      logger.error(`Failed to create vaccination notification: ${err.message}`);
     }
 
     if (owner?.email) {
       email.attempted++;
       try {
-        await sendDewormingReminderEmail(owner.email, {
+        await sendVaccinationReminderEmail(owner.email, {
           dueDate: due,
-          productName,
+          vaccineName,
           farmName,
           livestockName: animalName,
         });
         email.queued++;
       } catch (err: any) {
         email.failed++;
-        logger.error(`Failed to queue deworming reminder email to ${owner.email}: ${err.message}`);
+        logger.error(`Failed to queue vaccination reminder email to ${owner.email}: ${err.message}`);
       }
     } else {
       email.missingEmail++;
     }
 
-    (d as any).lastReminderKey = reminderKey;
-    (d as any).lastReminderSentAt = now;
+    (v as any).lastReminderKey = reminderKey;
+    (v as any).lastReminderSentAt = now;
     try {
-      await (d as any).save();
-      dewormingsUpdated++;
-      dewormingsMatched++;
+      await (v as any).save();
+      vaccinationsUpdated++;
+      vaccinationsMatched++;
       remindersSent++;
     } catch (err: any) {
       skips.saveFailed++;
-      logger.error(`Failed to update deworming reminder key: ${err.message}`);
+      logger.error(`Failed to update vaccination reminder key: ${err.message}`);
     }
   }
 
-  const result: DewormingReminderSweepResult = {
+  const result: VaccinationReminderSweepResult = {
     remindersSent,
-    dewormingsScanned,
-    dewormingsMatched,
-    dewormingsUpdated,
+    vaccinationsScanned,
+    vaccinationsMatched,
+    vaccinationsUpdated,
     skips,
     email,
     notifications,
   };
 
-  logger.info('Deworming reminder sweep finished', result);
+  logger.info('Vaccination reminder sweep finished', result);
   return result;
 };
 
-export const initDewormingReminderWorker = () => {
-  const worker = new Worker(
-    DEWORMING_REMINDER_QUEUE,
-    async (job: Job) => {
-      const now = new Date();
-      logger.info('Deworming reminder sweep started (job)', { jobId: job.id });
-
-      const result = await runDewormingReminderSweep({ now, limit: 500 });
-
-      logger.info('Deworming reminder sweep completed (job)', { jobId: job.id, ...result });
-      return result;
-    },
-    {
-      connection: redisConnection as any,
-      concurrency: 1,
-    }
-  );
-
-  worker.on('completed', (job) => {
-    logger.info('Deworming reminder job completed', { jobId: job.id });
-  });
-
-  worker.on('failed', (job, err) => {
-    logger.error('Deworming reminder job failed', {
-      jobId: job?.id,
-      error: err.message,
-      stack: err.stack,
-    });
-  });
-
-  logger.info('Deworming Reminder Worker initialized');
-  return worker;
+export const runVaccinationReminderJob = async () => {
+  const now = new Date();
+  const result = await runVaccinationReminderSweep({ now, limit: 500 });
+  return result;
 };

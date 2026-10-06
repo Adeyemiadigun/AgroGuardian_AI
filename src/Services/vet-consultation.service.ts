@@ -5,7 +5,7 @@ import WeatherData from '../Models/WeatherData';
 import { Types } from 'mongoose';
 import { IVetConsultation } from '../Types/livestock.types';
 import { livestockHealthService } from './livestock-health.service';
-import { chatWithContextDetailed, chatWithImagesDetailed } from '../Utils/geminiClient';
+import { chatWithContextDetailed, chatWithImagesDetailed } from '../Utils/groqClient';
 import { buildVetConsultationSystemPrompt } from '../Utils/vetPromptRouter';
 import { getHerdPreventionAdvice } from '../Utils/herdPreventionAdvice';
 import { formatVetAiStructuredResponseToText, parseVetAiStructuredResponse } from '../Utils/vetStructuredResponse';

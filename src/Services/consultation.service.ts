@@ -6,7 +6,7 @@ import User from "../Models/User";
 import cloudinary from "../Config/cloudinary";
 import {IConsultation} from "../Types/consultation.types";
 import logger from "../Utils/logger";
-import { consultWithImages } from "../Utils/openaiClient";
+import { consultWithImages } from "../Utils/groqClient";
 import { addResilienceSyncJob } from "../Queues/resilience.queue";
 import { createNotification } from "./notification.service";
 

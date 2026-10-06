@@ -8,22 +8,9 @@ import { connectDB } from './Config/db';
 import { isRedisQueueEnabled } from './Config/queueMode';
 import logger from './Utils/logger';
 
-import { initResilienceWorker } from './Workers/resilience.worker';
-import { initEmailWorker } from './Workers/email.worker';
-import { initWeatherSyncWorker } from './Workers/weatherSync.worker';
-import { initDailyWeatherSync } from './Queues/weatherSync.queue';
-import { initBreedingFollowUpReminderWorker } from './Workers/breedingFollowUpReminder.worker';
-import { initBreedingFollowUpReminderSchedule } from './Queues/breedingFollowUpReminder.queue';
-import { initDiagnosisWorker } from './Workers/diagnosis.worker';
-import { initLivestockDiagnosisWorker } from './Workers/livestockDiagnosis.worker';
-import { initLivestockHealthCheckWorker } from './Workers/livestockHealthCheck.worker';
+import { initAgroWorker } from './Workers/agroJobs.worker';
 import { initCarbonAccrualWorker } from './Workers/carbonAccrual.worker';
-import { initFeedingReminderWorker } from './Workers/feedingReminder.worker';
-import { initFeedingReminderSchedule } from './Queues/feedingReminder.queue';
-import { initVaccinationReminderWorker } from './Workers/vaccinationReminder.worker';
-import { initVaccinationReminderSchedule } from './Queues/vaccinationReminder.queue';
-import { initDewormingReminderWorker } from './Workers/dewormingReminder.worker';
-import { initDewormingReminderSchedule } from './Queues/dewormingReminder.queue';
+import { initSweeps } from './Schedulers/sweeps';
 
 const main = async () => {
   await connectDB();
@@ -39,34 +26,9 @@ const main = async () => {
     return;
   }
 
-  const workers = [
-    initResilienceWorker(),
-    initEmailWorker(),
-    initWeatherSyncWorker(),
-    initBreedingFollowUpReminderWorker(),
-    initDiagnosisWorker(),
-    initLivestockDiagnosisWorker(),
-    initLivestockHealthCheckWorker(),
-    initCarbonAccrualWorker(),
-    initFeedingReminderWorker(),
-    initVaccinationReminderWorker(),
-    initDewormingReminderWorker(),
-  ];
+  const workers = [initAgroWorker(), initCarbonAccrualWorker()].filter(Boolean);
 
-  const weatherSyncInterval = (process.env.WEATHER_SYNC_INTERVAL || '6-hourly') as any;
-  await initDailyWeatherSync(weatherSyncInterval);
-
-  const breedingReminderInterval = (process.env.BREEDING_FOLLOWUP_REMINDER_INTERVAL || 'hourly') as any;
-  await initBreedingFollowUpReminderSchedule(breedingReminderInterval);
-
-  const feedingReminderInterval = (process.env.FEEDING_REMINDER_INTERVAL || '15-min') as any;
-  await initFeedingReminderSchedule(feedingReminderInterval);
-
-  const vaccinationReminderInterval = (process.env.VACCINATION_REMINDER_INTERVAL || 'hourly') as any;
-  await initVaccinationReminderSchedule(vaccinationReminderInterval);
-
-  const dewormingReminderInterval = (process.env.DEWORMING_REMINDER_INTERVAL || 'hourly') as any;
-  await initDewormingReminderSchedule(dewormingReminderInterval);
+  initSweeps();
 
   logger.info('Background workers started', { workerCount: workers.length });
 

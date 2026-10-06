@@ -3,7 +3,7 @@ import DiagnosisChat from '../Models/DiagnosisChat';
 import Farm from '../Models/Farm';
 import User from '../Models/User';
 import logger from '../Utils/logger';
-import { analyzeCropImage, getModelName } from '../Utils/geminiClient';
+import { analyzeCropImage, getModelName } from '../Utils/groqClient';
 import { addResilienceSyncJob } from '../Queues/resilience.queue';
 import { sendBrevoEmail } from './email.service';
 

@@ -5,7 +5,7 @@ import WeatherData from '../Models/WeatherData';
 import logger from '../Utils/logger';
 import { LivestockVaccination, LivestockTreatment, LivestockIllness, LivestockDeworming, LivestockDiagnosis } from '../Models/LivestockHealth';
 import { LivestockHealthCheckReport } from '../Models/LivestockHealthCheck';
-import { chatWithContext, getModelName } from '../Utils/geminiClient';
+import { chatWithContext, getModelName } from '../Utils/groqClient';
 import { extractJsonFromLLM } from '../Utils/llmJson';
 import { z } from 'zod';
 import type { ILivestock } from '../Types/livestock.types';

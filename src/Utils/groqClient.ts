@@ -2,33 +2,36 @@ import OpenAI from 'openai';
 import logger from './logger';
 
 // =============================================================================
-// OpenRouter Configuration
+// Groq Configuration
 // =============================================================================
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
+const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 
 const api = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: OPENROUTER_API_KEY,
-  defaultHeaders: {
-    'HTTP-Referer': process.env.APP_URL || 'https://agroguardian.ai',
-    'X-Title': 'AgroGuardian AI',
-  },
+  baseURL: 'https://api.groq.com/openai/v1',
+  apiKey: GROQ_API_KEY,
 });
 
 // =============================================================================
 // Model Configuration
 // =============================================================================
-// Default to GPT-4o mini (better general reliability/quality).
-// You can override at runtime via AI_VISION_MODEL / AI_CHAT_MODEL.
+// Two model roles, both Groq-hosted, overridable via env:
+//   AI_VISION_MODEL   - image uploads (crop/livestock diagnoses, practice
+//                       verification, consultations with photos)
+//   AI_REASONING_MODEL- all text reasoning/chat (diagnosis chat, vet consults,
+//                       health-check analysis). AI_CHAT_MODEL kept as alias.
+// Model list: https://console.groq.com/docs/models
 // =============================================================================
 
-// Primary model for vision/diagnosis tasks
-const VISION_MODEL = process.env.AI_VISION_MODEL || 'openai/gpt-4o-mini';
+// Primary model for vision/diagnosis tasks (image inputs)
+const VISION_MODEL = process.env.AI_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
 
-// Model for text-only chat
-const CHAT_MODEL = process.env.AI_CHAT_MODEL || 'openai/gpt-4o-mini';
+// Model for text-only reasoning/chat
+const CHAT_MODEL =
+  process.env.AI_REASONING_MODEL ||
+  process.env.AI_CHAT_MODEL ||
+  'llama-3.3-70b-versatile';
 
-// Token caps (prevents OpenRouter 402 when defaults are too high)
+// Token caps (keep well under Groq output limits)
 const CHAT_MAX_TOKENS = Number(process.env.AI_CHAT_MAX_TOKENS || process.env.AI_MAX_TOKENS || 2048);
 const VISION_MAX_TOKENS = Number(process.env.AI_VISION_MAX_TOKENS || process.env.AI_MAX_TOKENS || 2048);
 
@@ -36,7 +39,7 @@ const VISION_MAX_TOKENS = Number(process.env.AI_VISION_MAX_TOKENS || process.env
 const FALLBACK_MODELS = (
   process.env.AI_FALLBACK_MODELS ||
   process.env.AI_FALLBACK_MODEL ||
-  'google/gemini-2.5-flash,google/gemini-2.5-pro,google/gemma-3-12b-it:free'
+  'meta-llama/llama-4-maverick-17b-128e-instruct,llama-3.1-8b-instant'
 )
   .split(',')
   .map((m) => m.trim())
@@ -50,14 +53,18 @@ export const getChatModelName = (): string => {
   return CHAT_MODEL;
 };
 
+export const getReasoningModelName = (): string => {
+  return CHAT_MODEL;
+};
+
 // =============================================================================
-// Robust Fallback & Retry Logic (Same as geminiClient)
+// Error helpers
 // =============================================================================
 
 const shouldAttemptFallback = (error: any): boolean => {
   const status = error?.status;
   const code = error?.code;
-  // 402: Payment Required (credits), 404: Model not found, 429: Rate limit, 503: Service Unavailable
+  // 402: insufficient credits, 404: model not found, 429: rate limit, 503: capacity
   return status === 402 || status === 404 || status === 429 || status === 503 || code === 'model_not_found';
 };
 
@@ -72,15 +79,34 @@ const getHeader = (headers: any, name: string): string | undefined => {
 
 const summarizeLlmError = (error: any) => {
   const headers = error?.headers || error?.response?.headers;
-  const requestId = getHeader(headers, 'x-request-id') || getHeader(headers, 'cf-ray');
-  const providerMessage = error?.error?.message || error?.response?.data?.error?.message;
+
+  const requestId =
+    getHeader(headers, 'x-request-id') ||
+    getHeader(headers, 'x-requestid') ||
+    getHeader(headers, 'cf-ray');
+
+  const retryAfter = getHeader(headers, 'retry-after');
+
+  const rateLimit = {
+    limit: getHeader(headers, 'x-ratelimit-limit') || getHeader(headers, 'x-ratelimit-limit-requests'),
+    remaining: getHeader(headers, 'x-ratelimit-remaining') || getHeader(headers, 'x-ratelimit-remaining-requests'),
+    reset: getHeader(headers, 'x-ratelimit-reset') || getHeader(headers, 'x-ratelimit-reset-requests'),
+  };
+
+  const providerMessage =
+    error?.error?.message ||
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.message;
 
   return {
     status: error?.status,
     code: error?.code,
+    type: error?.type,
     message: error?.message,
     providerMessage,
     requestId,
+    retryAfter,
+    rateLimit,
   };
 };
 
@@ -88,59 +114,168 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const RETRY_MAX = Number(process.env.AI_RETRY_MAX || 2);
 const RETRY_BASE_MS = Number(process.env.AI_RETRY_BASE_MS || 500);
 
+// If the primary model is rate-limited (429), skip it briefly and use fallbacks.
+const PRIMARY_COOLDOWN_MS = Number(process.env.AI_PRIMARY_COOLDOWN_MS || 30_000);
+const primaryCooldownUntil = new Map<string, number>();
+
+const LOG_LLM_USAGE = String(process.env.AI_LOG_LLM_USAGE || '').toLowerCase() === 'true';
+const logUsage = (model: string, result: any) => {
+  const usage = result?.usage;
+  if (!LOG_LLM_USAGE || !usage) return;
+  logger.debug('LLM usage', {
+    model,
+    promptTokens: usage.prompt_tokens,
+    completionTokens: usage.completion_tokens,
+    totalTokens: usage.total_tokens,
+  });
+};
+
+// Helper to call the API with retry + automatic fallback
 const callWithFallback = async (
   createCall: (model: string) => Promise<any>,
   primaryModel: string
 ): Promise<any> => {
+  if (!GROQ_API_KEY) {
+    throw new Error('GROQ_API_KEY is not set. Add it to your .env file.');
+  }
+
+  // Circuit breaker: if primary is cooling down, skip straight to fallbacks
+  const cooldown = primaryCooldownUntil.get(primaryModel);
+  if (cooldown && Date.now() < cooldown) {
+    logger.warn('Primary model in cooldown; skipping to fallbacks', {
+      primaryModel,
+      cooldownMsRemaining: cooldown - Date.now(),
+      fallbacks: FALLBACK_MODELS,
+    });
+
+    let lastErr: any;
+    for (const fallbackModel of FALLBACK_MODELS) {
+      if (!fallbackModel || fallbackModel === primaryModel) continue;
+      try {
+        const res = await createCall(fallbackModel);
+        logUsage(fallbackModel, res);
+        return res;
+      } catch (e: any) {
+        lastErr = e;
+        logger.warn('Fallback model failed during cooldown; trying next', {
+          primaryModel,
+          fallbackModel,
+          ...summarizeLlmError(e),
+        });
+        continue;
+      }
+    }
+    throw lastErr || new Error('All fallback models failed during cooldown');
+  }
+
+  // Retry primary on transient throttling before falling back
   for (let attempt = 0; attempt <= RETRY_MAX; attempt++) {
     try {
-      return await createCall(primaryModel);
+      const res = await createCall(primaryModel);
+      logUsage(primaryModel, res);
+      return res;
     } catch (error: any) {
       const summary = summarizeLlmError(error);
+      const status = error?.status;
+
+      const retryAfterSec = summary?.retryAfter ? Number(summary.retryAfter) : NaN;
+      const waitMs = Number.isFinite(retryAfterSec)
+        ? Math.max(0, retryAfterSec * 1000)
+        : Math.min(8000, RETRY_BASE_MS * Math.pow(2, attempt));
+
+      const retryable = status === 429 || status === 503;
       const isLastAttempt = attempt >= RETRY_MAX;
-      const retryable = error.status === 429 || error.status === 503;
 
       if (retryable && !isLastAttempt) {
-        const waitMs = Math.min(8000, RETRY_BASE_MS * Math.pow(2, attempt));
-        logger.warn('LLM primary model throttled; retrying', { primaryModel, attempt, waitMs, ...summary });
-        await sleep(waitMs);
+        logger.warn('LLM primary model throttled; retrying', {
+          primaryModel,
+          attempt: attempt + 1,
+          waitMs,
+          ...summary,
+        });
+        await sleep(waitMs + Math.floor(Math.random() * 250));
         continue;
       }
 
+      if (status === 429) {
+        primaryCooldownUntil.set(primaryModel, Date.now() + PRIMARY_COOLDOWN_MS);
+      }
+
       if (!shouldAttemptFallback(error) || FALLBACK_MODELS.length === 0) {
+        logger.error('LLM request failed (no fallback attempted)', { primaryModel, ...summary });
         throw error;
       }
 
-      logger.warn('Primary model failed; trying fallbacks', { primaryModel, fallbacks: FALLBACK_MODELS, ...summary });
+      logger.warn('Primary model failed; trying fallbacks', {
+        primaryModel,
+        fallbacks: FALLBACK_MODELS,
+        ...summary,
+      });
 
-      let lastErr = error;
+      let lastErr: any = error;
+
       for (const fallbackModel of FALLBACK_MODELS) {
         if (!fallbackModel || fallbackModel === primaryModel) continue;
+
         try {
-          return await createCall(fallbackModel);
+          const res = await createCall(fallbackModel);
+          logUsage(fallbackModel, res);
+          return res;
         } catch (e: any) {
           lastErr = e;
+          const s2 = summarizeLlmError(e);
+
           if (shouldAttemptFallback(e)) {
-            logger.warn('Fallback model failed; trying next', { fallbackModel, ...summarizeLlmError(e) });
+            logger.warn('Fallback model failed; trying next', {
+              primaryModel,
+              fallbackModel,
+              ...s2,
+            });
             continue;
           }
+
+          logger.error('Fallback model failed (non-fallbackable error)', {
+            primaryModel,
+            fallbackModel,
+            ...s2,
+          });
           throw e;
         }
       }
+
+      logger.error('All fallback models failed', {
+        primaryModel,
+        fallbacks: FALLBACK_MODELS,
+        ...summarizeLlmError(lastErr),
+      });
+
       throw lastErr;
     }
+  }
+
+  // Should be unreachable
+  const res = await createCall(primaryModel);
+  logUsage(primaryModel, res);
+  return res;
+};
+
+// =============================================================================
+// Response parsing
+// =============================================================================
+
+const extractJSON = (text: string): any => {
+  try { return JSON.parse(text); } catch {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
+    const objectMatch = text.match(/\{[\s\S]*\}/);
+    if (objectMatch) return JSON.parse(objectMatch[0]);
+    throw new Error('No valid JSON found in response');
   }
 };
 
 // =============================================================================
-// Features
+// Practice verification (carbon credits)
 // =============================================================================
-
-const withReasoning = (params: any): any => {
-  const enabled = String(process.env.AI_REASONING_ENABLED || '').toLowerCase() === 'true';
-  if (!enabled) return params;
-  return { ...params, include_reasoning: true };
-};
 
 const COMPARISON_PROMPT = `You are a strict agricultural auditor. You are comparing two photos of the same farm location: one taken at the START of a regenerative practice and one taken at the END.
 
@@ -162,16 +297,6 @@ Return ONLY a JSON response:
 
 IMPORTANT: Be very strict. If it's not clearly the same location or if the practice evidence is weak, mark isVerified as false.`;
 
-const extractJSON = (text: string): any => {
-  try { return JSON.parse(text); } catch {
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) return JSON.parse(jsonMatch[1].trim());
-    const objectMatch = text.match(/\{[\s\S]*\}/);
-    if (objectMatch) return JSON.parse(objectMatch[0]);
-    throw new Error('No valid JSON found in response');
-  }
-};
-
 export const verifyPracticeImage = async (
   imageBase64: string,
   practiceName: string
@@ -185,7 +310,7 @@ export const verifyPracticeImage = async (
     "observations": "What you see",
     "reasoning": "Conclusion"
   }`;
-  
+
   const result = await callWithFallback(
     (model) => api.chat.completions.create({
       model,
@@ -203,7 +328,7 @@ export const verifyPracticeImage = async (
     } as any),
     VISION_MODEL
   );
-  
+
   return extractJSON(result.choices[0].message.content || '{}');
 };
 
@@ -237,6 +362,10 @@ export const comparePracticeImages = async (
 
   return extractJSON(result.choices[0].message.content || '{}');
 };
+
+// =============================================================================
+// Crop diagnosis
+// =============================================================================
 
 const DIAGNOSIS_PROMPT = `You are an expert agricultural plant pathologist and entomologist AI for AgroGuardian AI, specializing in crop disease detection and pest management for African and tropical crops.
 
@@ -346,17 +475,17 @@ export const analyzeCropImage = async (
   const message = result.choices[0].message.content;
   try {
     const parsed = extractJSON(message || '{}');
-    
+
     // Add low confidence warning
     if (parsed.confidence && parsed.confidence < 70) {
       parsed.lowConfidenceWarning = `⚠️ Confidence is ${parsed.confidence}%. Consider uploading clearer images or consulting a local agricultural extension officer for verification.`;
     }
-    
+
     // Add critical severity warning
     if (parsed.severity === 'critical') {
       parsed.criticalWarning = '🚨 CRITICAL: Immediate action required to prevent total crop loss. Contact local agricultural office if possible.';
     }
-    
+
     return parsed;
   } catch (e) {
     logger.error('Failed to parse AI response:', message);
@@ -364,6 +493,42 @@ export const analyzeCropImage = async (
   }
 };
 
+/**
+ * Analyze image(s) with a custom prompt - used for livestock diagnosis
+ */
+export const analyzeImageWithGroq = async (
+  imageUrls: string[],
+  prompt: string
+): Promise<string> => {
+  const content: any[] = [{ type: 'text', text: prompt }];
+
+  imageUrls.forEach(url => {
+    content.push({
+      type: 'image_url',
+      image_url: { url: url },
+    });
+  });
+
+  const result = await callWithFallback(
+    (model) => api.chat.completions.create({
+      model,
+      max_tokens: VISION_MAX_TOKENS,
+      messages: [
+        {
+          role: 'user',
+          content: content,
+        },
+      ],
+    } as any),
+    VISION_MODEL
+  );
+
+  return result.choices[0].message.content || '';
+};
+
+// =============================================================================
+// Chat helpers
+// =============================================================================
 
 export const chatWithDiagnosis = async (
   userMessage: string,
@@ -430,25 +595,19 @@ RESPONSE STYLE:
 
   const messages = [
     { role: 'system', content: systemPrompt },
-    ...chatHistory.map((msg) => {
-      const base: any = { role: msg.role, content: msg.content };
-      if (msg.role === 'assistant' && (msg as any).reasoning_details) {
-        base.reasoning_details = (msg as any).reasoning_details;
-      }
-      return base;
-    }),
+    ...chatHistory.map((msg) => ({ role: msg.role, content: msg.content })),
     { role: 'user', content: userMessage },
   ] as any[];
-  
+
   const result = await callWithFallback(
-    (model) => api.chat.completions.create(withReasoning({ model, max_tokens: CHAT_MAX_TOKENS, messages }) as any),
+    (model) => api.chat.completions.create({ model, max_tokens: CHAT_MAX_TOKENS, messages } as any),
     CHAT_MODEL
   );
-  
+
   const assistantMsg = result.choices[0].message as any;
   return {
     content: assistantMsg?.content || '',
-    reasoning_details: assistantMsg?.reasoning_details,
+    reasoning_details: undefined,
   };
 };
 
@@ -475,11 +634,7 @@ export const chatWithImagesDetailed = async (
       cleanContent = cleanContent.split('|||METADATA|||')[0].trim();
     }
 
-    const baseMsg: any = { role: msg.role, content: cleanContent };
-    if (msg.role === 'assistant' && (msg as any).reasoning_details) {
-      baseMsg.reasoning_details = (msg as any).reasoning_details;
-    }
-    messages.push(baseMsg);
+    messages.push({ role: msg.role, content: cleanContent });
   }
 
   if (imageUrls && imageUrls.length > 0) {
@@ -496,15 +651,47 @@ export const chatWithImagesDetailed = async (
   const modelToUse = hasImages ? VISION_MODEL : CHAT_MODEL;
   const max_tokens = hasImages ? VISION_MAX_TOKENS : CHAT_MAX_TOKENS;
   const result = await callWithFallback(
-    (model) => api.chat.completions.create(withReasoning({ model, max_tokens, messages }) as any),
+    (model) => api.chat.completions.create({ model, max_tokens, messages } as any),
     modelToUse
   );
 
   const assistantMsg = result.choices[0].message as any;
   return {
     content: assistantMsg?.content || '',
-    reasoning_details: assistantMsg?.reasoning_details,
+    reasoning_details: undefined,
   };
+};
+
+export const chatWithContextDetailed = async (
+  userMessage: string,
+  chatHistory: { role: 'user' | 'assistant'; content: string; reasoning_details?: any }[],
+  systemPrompt: string
+): Promise<{ content: string; reasoning_details?: any }> => {
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...chatHistory.map((msg) => ({ role: msg.role, content: msg.content })),
+    { role: 'user', content: userMessage },
+  ] as any[];
+
+  const result = await callWithFallback(
+    (model) => api.chat.completions.create({ model, max_tokens: CHAT_MAX_TOKENS, messages } as any),
+    CHAT_MODEL
+  );
+
+  const assistantMsg = result.choices[0].message as any;
+  return {
+    content: assistantMsg?.content || '',
+    reasoning_details: undefined,
+  };
+};
+
+export const chatWithContext = async (
+  userMessage: string,
+  chatHistory: { role: 'user' | 'assistant'; content: string; reasoning_details?: any }[],
+  systemPrompt: string
+): Promise<string> => {
+  const result = await chatWithContextDetailed(userMessage, chatHistory, systemPrompt);
+  return result.content;
 };
 
 // Consultation chat with image support - for general crop concerns without diagnosis
@@ -525,7 +712,7 @@ export const consultWithImages = async (
     };
   }
 ): Promise<{ response: string; issueType?: string; severity?: string; suggestedTitle?: string; reasoning_details?: any }> => {
-  
+
   const envText = context.weather
     ? `\n- Current Weather: ${context.weather.description}, ${context.weather.temperature}°C, ${context.weather.humidity}% humidity`
     : '';
@@ -583,12 +770,7 @@ IMPORTANT: After your response, on a new line, provide a JSON summary:
       if (msg.role === 'assistant' && cleanContent.includes('|||METADATA|||')) {
         cleanContent = cleanContent.split('|||METADATA|||')[0].trim();
       }
-      // Preserve OpenRouter reasoning_details if present
-      const baseMsg: any = { role: msg.role, content: cleanContent };
-      if (msg.role === 'assistant' && (msg as any).reasoning_details) {
-        baseMsg.reasoning_details = (msg as any).reasoning_details;
-      }
-      messages.push(baseMsg);
+      messages.push({ role: msg.role, content: cleanContent });
     }
   }
 
@@ -607,16 +789,15 @@ IMPORTANT: After your response, on a new line, provide a JSON summary:
   const hasImages = !!(imageUrls && imageUrls.length > 0);
   const modelToUse = hasImages ? VISION_MODEL : CHAT_MODEL;
   const max_tokens = hasImages ? VISION_MAX_TOKENS : CHAT_MAX_TOKENS;
-  
+
   const result = await callWithFallback(
-    (model) => api.chat.completions.create(withReasoning({ model, max_tokens, messages }) as any),
+    (model) => api.chat.completions.create({ model, max_tokens, messages } as any),
     modelToUse
   );
 
   const assistantMsg = result.choices[0].message as any;
   const fullResponse = assistantMsg?.content || '';
-  const reasoning_details = assistantMsg?.reasoning_details;
-  
+
   // Parse metadata from response
   let response = fullResponse;
   let issueType: string | undefined;
@@ -628,7 +809,7 @@ IMPORTANT: After your response, on a new line, provide a JSON summary:
     response = parts[0].trim();
     try {
       const metadata = extractJSON(parts[1].trim());
-      
+
       // Validate and sanitize issueType
       const validIssueTypes = ["disease", "pest", "nutrient", "weather", "general"];
       let rawIssueType = String(metadata.issueType || '').toLowerCase();
@@ -652,5 +833,5 @@ IMPORTANT: After your response, on a new line, provide a JSON summary:
     }
   }
 
-  return { response, issueType, severity, suggestedTitle, reasoning_details };
+  return { response, issueType, severity, suggestedTitle, reasoning_details: undefined };
 };

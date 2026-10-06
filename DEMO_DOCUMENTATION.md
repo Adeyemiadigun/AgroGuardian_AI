@@ -49,10 +49,10 @@ Calculates a 0-100 score representing the farm's ability to withstand shocks.
     *   **Sustainability Index**: Adoption rate of climate-smart practices across 4 categories (Soil, Water, Crop, Agroforestry).
 
 ### 🤖 Multi-Model AI Engine
-The "Brain" of the project uses a robust OpenRouter integration:
-*   **Primary Models**: GPT-4o mini, Gemini 1.5 Flash.
+The "Brain" of the project uses the **Groq** inference API (OpenAI-compatible):
+*   **Primary Models**: Llama 4 Scout (vision) and Llama 3.3 70B (chat) — configurable via `AI_VISION_MODEL` / `AI_CHAT_MODEL`.
 *   **Self-Healing Logic**:
-    *   **Automatic Fallback**: If a model is rate-limited or unavailable, the engine instantly switches to a fallback (e.g., GPT-4o → Gemini → Gemma).
+    *   **Automatic Fallback**: If a model is rate-limited or unavailable, the engine instantly switches to a fallback (e.g. Llama 4 Maverick → Llama 3.1 8B).
     *   **Structured Output (Zod)**: All AI responses are strictly parsed into JSON schemas to ensure UI consistency and prevent "LLM hallucination" in critical vet advice.
     *   **JSON Repair**: If an AI provides malformed JSON, a secondary "Repair Agent" automatically fixes the syntax before the user sees it.
 

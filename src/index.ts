@@ -30,22 +30,11 @@ import vetConsultationRoutes from './Routes/vet-consultation.routes';
 import livestockAlertsRoutes from './Routes/livestock-alerts.routes';
 
 // Workers & Queues
-import { initResilienceWorker } from './Workers/resilience.worker';
-import { initEmailWorker } from './Workers/email.worker';
-import { initWeatherSyncWorker } from './Workers/weatherSync.worker';
-import { initDailyWeatherSync } from './Queues/weatherSync.queue';
-import { initBreedingFollowUpReminderWorker } from './Workers/breedingFollowUpReminder.worker';
-import { initBreedingFollowUpReminderSchedule } from './Queues/breedingFollowUpReminder.queue';
-import { initDiagnosisWorker } from './Workers/diagnosis.worker';
-import { initLivestockDiagnosisWorker } from './Workers/livestockDiagnosis.worker';
-import { initLivestockHealthCheckWorker } from './Workers/livestockHealthCheck.worker';
+// Single BullMQ worker + in-process sweep schedulers (Redis commands are
+// kept low for the Upstash free tier; see src/Workers/agroJobs.worker.ts).
+import { initAgroWorker } from './Workers/agroJobs.worker';
 import { initCarbonAccrualWorker } from './Workers/carbonAccrual.worker';
-import { initFeedingReminderWorker } from './Workers/feedingReminder.worker';
-import { initFeedingReminderSchedule } from './Queues/feedingReminder.queue';
-import { initVaccinationReminderWorker } from './Workers/vaccinationReminder.worker';
-import { initVaccinationReminderSchedule } from './Queues/vaccinationReminder.queue';
-import { initDewormingReminderWorker } from './Workers/dewormingReminder.worker';
-import { initDewormingReminderSchedule } from './Queues/dewormingReminder.queue';
+import { initSweeps } from './Schedulers/sweeps';
 
 const app: Express = express();
 const PORT = process.env.PORT || 5000;
@@ -60,33 +49,9 @@ let runWorkers = process.env.RUN_WORKERS
   : isRedisQueueEnabled();
 
 if (runWorkers) {
-  initResilienceWorker();
-  initEmailWorker();
-  initWeatherSyncWorker();
-
-  const weatherSyncInterval = (process.env.WEATHER_SYNC_INTERVAL || '6-hourly') as any;
-  initDailyWeatherSync(weatherSyncInterval);
-
-  initBreedingFollowUpReminderWorker();
-  const breedingReminderInterval = (process.env.BREEDING_FOLLOWUP_REMINDER_INTERVAL || 'hourly') as any;
-  initBreedingFollowUpReminderSchedule(breedingReminderInterval);
-
-  initDiagnosisWorker();
-  initLivestockDiagnosisWorker();
-  initLivestockHealthCheckWorker();
+  initAgroWorker();
   initCarbonAccrualWorker();
-
-  initFeedingReminderWorker();
-  const feedingReminderInterval = (process.env.FEEDING_REMINDER_INTERVAL || '15-min') as any;
-  initFeedingReminderSchedule(feedingReminderInterval);
-
-  initVaccinationReminderWorker();
-  const vaccinationReminderInterval = (process.env.VACCINATION_REMINDER_INTERVAL || 'hourly') as any;
-  initVaccinationReminderSchedule(vaccinationReminderInterval);
-
-  initDewormingReminderWorker();
-  const dewormingReminderInterval = (process.env.DEWORMING_REMINDER_INTERVAL || 'hourly') as any;
-  initDewormingReminderSchedule(dewormingReminderInterval);
+  initSweeps();
 } else {
   logger.warn('Queue workers are disabled (RUN_WORKERS=false or QUEUE_MODE=inline).');
 }

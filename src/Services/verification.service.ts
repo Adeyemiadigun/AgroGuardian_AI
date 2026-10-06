@@ -3,7 +3,7 @@ import PracticeActivityLog from "../Models/PracticeActivityLogs";
 import FarmPractice from "../Models/FarmPractice";
 import Farm from "../Models/Farm";
 import CropSeason from "../Models/CropSeason";
-import { verifyPracticeImage, comparePracticeImages } from "../Utils/openaiClient";
+import { verifyPracticeImage, comparePracticeImages } from "../Utils/groqClient";
 import logger from "../Utils/logger";
 import { calculateCarbonForActivity } from "./carbon.service";
 import { backfillAccrualForPracticeLog } from "./carbon-accrual.service";

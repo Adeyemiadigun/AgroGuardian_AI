@@ -9,7 +9,7 @@ import { createNotification } from './notification.service';
 import { sendBrevoEmail } from './email.service';
 import { livestockHealthService } from './livestock-health.service';
 import { Types } from 'mongoose';
-import { analyzeImageWithGemini, chatWithContextDetailed, getModelName } from '../Utils/geminiClient';
+import { analyzeImageWithGroq, chatWithContextDetailed, getModelName } from '../Utils/groqClient';
 import { buildVetDiagnosisChatSystemPrompt } from '../Utils/vetPromptRouter';
 import { getHerdPreventionAdvice } from '../Utils/herdPreventionAdvice';
 import { formatVetAiStructuredResponseToText, parseVetAiStructuredResponse } from '../Utils/vetStructuredResponse';
@@ -360,7 +360,7 @@ export class LivestockDiagnosisService {
       let parsedResponse: any;
 
       try {
-        aiResponse = await analyzeImageWithGemini(imageUrls, prompt);
+        aiResponse = await analyzeImageWithGroq(imageUrls, prompt);
       } catch (e: any) {
         logger.warn('AI image diagnosis failed; returning safe fallback', {
           status: e?.status,
@@ -384,7 +384,7 @@ export class LivestockDiagnosisService {
           veterinaryRequired: true,
           quarantineRecommended: true,
           followUpDays: 1,
-          additionalNotes: 'If this keeps happening, change OpenRouter models, reduce AI_MAX_TOKENS, add credits, or use BYOK in OpenRouter integrations.'
+          additionalNotes: 'If this keeps happening, change AI_VISION_MODEL/AI_CHAT_MODEL to another Groq model, reduce AI_MAX_TOKENS, or check your Groq API key quota.'
         };
       }
 

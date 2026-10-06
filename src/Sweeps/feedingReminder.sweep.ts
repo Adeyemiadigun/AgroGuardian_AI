@@ -1,6 +1,3 @@
-import { Worker, Job } from 'bullmq';
-import { redisConnection } from '../Config/redis';
-import { FEEDING_REMINDER_QUEUE } from '../Queues/feedingReminder.queue';
 import { LivestockFeedingSchedule, LivestockFeeding } from '../Models/LivestockManagement';
 import logger from '../Utils/logger';
 import { sendFeedingReminderEmail } from '../Services/email.service';
@@ -301,47 +298,16 @@ export const runFeedingReminderSweep = async (opts: {
   return result;
 };
 
-export const initFeedingReminderWorker = () => {
-  const worker = new Worker(
-    FEEDING_REMINDER_QUEUE,
-    async (job: Job) => {
-      const now = new Date();
-      const windowMinutes = Math.max(1, parseInt(process.env.FEEDING_REMINDER_WINDOW_MINUTES || '15', 10) || 15);
+export const runFeedingReminderJob = async () => {
+  const now = new Date();
+  const windowMinutes = Math.max(1, parseInt(process.env.FEEDING_REMINDER_WINDOW_MINUTES || '15', 10) || 15);
 
-      logger.info('Feeding reminder sweep started', { jobId: job.id, windowMinutes });
-
-      const result = await runFeedingReminderSweep({
-        now,
-        windowMinutes,
-        limit: 500,
-        source: 'worker',
-      });
-
-      logger.info('Feeding reminder sweep completed', {
-        jobId: job.id,
-        ...result,
-      });
-
-      return result;
-    },
-    {
-      connection: redisConnection as any,
-      concurrency: 1,
-    }
-  );
-
-  worker.on('completed', (job) => {
-    logger.info('Feeding reminder job completed', { jobId: job.id });
+  const result = await runFeedingReminderSweep({
+    now,
+    windowMinutes,
+    limit: 500,
+    source: 'worker',
   });
 
-  worker.on('failed', (job, err) => {
-    logger.error('Feeding reminder job failed', {
-      jobId: job?.id,
-      error: err.message,
-      stack: err.stack,
-    });
-  });
-
-  logger.info('Feeding Reminder Worker initialized');
-  return worker;
+  return result;
 };

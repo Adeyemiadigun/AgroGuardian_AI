@@ -7,7 +7,7 @@ import cloudinary from "../Config/cloudinary";
 import logger from "../Utils/logger";
 import { addDiagnosisJob } from "../Queues/diagnosis.queue";
 import { addResilienceSyncJob } from "../Queues/resilience.queue";
-import { chatWithDiagnosis } from "../Utils/geminiClient";
+import { chatWithDiagnosis } from "../Utils/groqClient";
 import { createNotification } from "./notification.service";
 import { sendBrevoEmail } from "./email.service";
 

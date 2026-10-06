@@ -1,19 +1,10 @@
-import { Queue } from 'bullmq';
-import { redisConnection } from '../Config/redis';
 import { isRedisQueueEnabled } from '../Config/queueMode';
+import { enqueueJob } from './agroJobs.queue';
 import logger from '../Utils/logger';
+import { sendBrevoEmail } from '../Services/email.service';
 
+// Kept for backward compatibility (previously the BullMQ queue name).
 export const EMAIL_QUEUE = 'email-queue';
-
-let emailQueue: Queue | null = null;
-const getEmailQueue = () => {
-  if (!emailQueue) {
-    emailQueue = new Queue(EMAIL_QUEUE, {
-      connection: redisConnection as any,
-    });
-  }
-  return emailQueue;
-};
 
 export const addEmailToQueue = async (to: string, subject: string, html: string) => {
   if (!isRedisQueueEnabled()) {
@@ -22,18 +13,20 @@ export const addEmailToQueue = async (to: string, subject: string, html: string)
     return;
   }
 
-  try {
-    await getEmailQueue().add(
-      'send-email',
-      { to, subject, html },
-      {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 10000 },
-        removeOnComplete: true,
-      }
-    );
+  const result = await enqueueJob(
+    'send-email',
+    { to, subject, html },
+    {
+      attempts: 5,
+      backoff: { type: 'exponential', delay: 10000 },
+      removeOnComplete: true,
+    },
+    async () => {
+      await sendBrevoEmail(to, subject, html);
+    }
+  );
+
+  if (result.status === 'queued') {
     logger.debug(`Email job added to queue for: ${to}`);
-  } catch (error: any) {
-    logger.error(`Failed to add email to queue: ${error.message}`);
   }
 };
